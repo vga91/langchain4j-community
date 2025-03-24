@@ -27,7 +27,7 @@ import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingSearchResult;
 import dev.langchain4j.store.embedding.EmbeddingStore;
-
+import dev.langchain4j.store.embedding.filter.Filter;
 import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.Collection;
@@ -36,8 +36,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
-
-import dev.langchain4j.store.embedding.filter.Filter;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Session;
 import org.neo4j.driver.SessionConfig;
@@ -237,8 +235,9 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
     @Override
     public void removeAll() {
         try (var session = session()) {
-            String statement =
-                    String.format("CALL { MATCH (n:%1$s) DETACH DELETE n } IN TRANSACTIONS", this.sanitizedLabel);
+            String statement = String.format(
+                    "CALL { MATCH (n:%1$s) WHERE n.%2$s IS NOT NULL AND size(n.%2$s) = toInteger(%3$s) DETACH DELETE n } IN TRANSACTIONS",
+                    this.sanitizedLabel, this.embeddingProperty, this.dimension);
             session.run(statement);
         }
     }
@@ -249,9 +248,24 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
 
         try (var session = session()) {
             String statement = String.format(
-                    "CALL { UNWIND $ids AS id MATCH (n:%1$s {%2$s: id}) DETACH DELETE n } IN TRANSACTIONS ",
-                    this.sanitizedLabel, this.sanitizedIdProperty);
+                    "CALL { UNWIND $ids AS id MATCH (n:%1$s {%2$s: id}) WHERE n.%3$s IS NOT NULL AND size(n.%3$s) = toInteger(%4$s) DETACH DELETE n } IN TRANSACTIONS ",
+                    this.sanitizedLabel, this.sanitizedIdProperty, this.embeddingProperty, this.dimension);
             final Map<String, Object> params = Map.of("ids", ids);
+            session.run(statement, params);
+        }
+    }
+
+    @Override
+    public void removeAll(Filter filter) {
+        ensureNotNull(filter, "filter");
+
+        final AbstractMap.SimpleEntry<String, Map<?, ?>> filterEntry = new Neo4jFilterMapper().map(filter);
+
+        try (var session = session()) {
+            String statement = String.format(
+                    "CALL { MATCH (n:%1$s) WHERE n.%2$s IS NOT NULL AND size(n.%2$s) = toInteger(%3$s) AND %4$s DETACH DELETE n } IN TRANSACTIONS ",
+                    this.sanitizedLabel, this.embeddingProperty, this.dimension, filterEntry.getKey());
+            final Map params = filterEntry.getValue();
             session.run(statement, params);
         }
     }
@@ -275,7 +289,7 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
     */
     private EmbeddingSearchResult getSearchResUsingVectorSimilarity(
             EmbeddingSearchRequest request, Filter filter, Value embeddingValue, Session session) {
-        final AbstractMap.SimpleEntry<String, Map> entry = new Neo4jFilterMapper().map(filter);
+        final AbstractMap.SimpleEntry<String, Map<?, ?>> entry = new Neo4jFilterMapper().map(filter);
         final String query =
                 """
                 CYPHER runtime = parallel parallelRuntimeSupport=all
@@ -287,7 +301,12 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
                 ORDER BY score DESC
                 LIMIT $maxResults
                 """
-                        .formatted(sanitizedLabel, embeddingProperty, dimension, entry.getKey(), embeddingValue);
+                        .formatted(
+                                this.sanitizedLabel,
+                                this.embeddingProperty,
+                                this.dimension,
+                                entry.getKey(),
+                                embeddingValue);
         final Map params = entry.getValue();
         params.put("minScore", request.minScore());
         params.put("maxResults", request.maxResults());
@@ -314,7 +333,7 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
                 """;
         return getEmbeddingSearchResult(session, query, params);
     }
-    
+
     private EmbeddingSearchResult<TextSegment> getEmbeddingSearchResult(
             Session session, String query, Map<String, Object> params) {
         List<EmbeddingMatch<TextSegment>> matches =

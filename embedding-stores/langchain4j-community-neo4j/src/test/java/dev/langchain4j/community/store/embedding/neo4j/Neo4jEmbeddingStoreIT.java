@@ -19,6 +19,8 @@ import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingSearchResult;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.EmbeddingStoreIT;
+import dev.langchain4j.store.embedding.filter.comparison.*;
+import dev.langchain4j.store.embedding.filter.logical.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -27,9 +29,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
-
-import dev.langchain4j.store.embedding.filter.comparison.*;
-import dev.langchain4j.store.embedding.filter.logical.*;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -292,7 +291,7 @@ class Neo4jEmbeddingStoreIT extends EmbeddingStoreIT {
         assertThat(rowsBatched.get(0)).hasSize(10000);
         assertThat(rowsBatched.get(1)).hasSize(1001);
     }
-    
+
     @Test
     void should_add_embedding_with_id_and_retrieve_with_and_without_prefilter() {
 
