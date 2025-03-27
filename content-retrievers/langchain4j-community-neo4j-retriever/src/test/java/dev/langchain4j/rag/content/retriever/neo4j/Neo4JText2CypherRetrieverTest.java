@@ -121,7 +121,7 @@ public class Neo4JText2CypherRetrieverTest extends Neo4jText2CypherRetrieverBase
     }
 
     @Test
-    void shouldReturnEmptyListWhenQueryIsInvalid() {
+    void shouldReturnEmptyListWhenQueryHasNoResults() {
         // Given
         Query query = new Query("Who is the author of the movie 'Dune'?");
         when(chatLanguageModel.chat(anyString()))
@@ -133,5 +133,20 @@ public class Neo4JText2CypherRetrieverTest extends Neo4jText2CypherRetrieverBase
 
         // Then
         assertThat(contents).isEmpty();
+    }
+
+    @Test
+    void shouldReturnEmptyListWhenCypherQueryIsInvalid() {
+        // Given
+        Query query = new Query("Who is the author of the movie 'Dune'?");
+        when(chatLanguageModel.chat(anyString()))
+                .thenReturn(
+                        "MATCH(movie:Movie {title: 'Dune'}) RETURN author.name AS output");
+
+        try {
+            retriever.retrieve(query);
+        } catch (RuntimeException e) {
+            assertThat(e.getMessage()).contains("Variable `author` not defined");
+        }
     }
 }
