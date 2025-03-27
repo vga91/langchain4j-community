@@ -145,4 +145,21 @@ public class Neo4JText2CypherRetrieverTest extends Neo4jText2CypherRetrieverBase
             assertThat(e.getMessage()).contains("Variable `author` not defined");
         }
     }
+
+    @Test
+    void shouldThrowsErrorWhenNeo4jGraphQueryIsInvalid() {
+        final String invalidQuery = "MATCH(movie:Movie {title: 'Dune'}) RETURN author.name AS output";
+
+        try {
+            graph.executeRead(invalidQuery);
+        } catch (RuntimeException e) {
+            assertThat(e.getMessage()).contains("Variable `author` not defined");
+        }
+
+        try {
+            graph.executeWrite(invalidQuery);
+        } catch (RuntimeException e) {
+            assertThat(e.getCause().getMessage()).contains("Variable `author` not defined");
+        }
+    }
 }
