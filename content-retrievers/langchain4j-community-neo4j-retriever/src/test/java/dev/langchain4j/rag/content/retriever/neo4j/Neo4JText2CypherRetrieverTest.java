@@ -175,4 +175,28 @@ public class Neo4JText2CypherRetrieverTest extends Neo4jText2CypherRetrieverBase
         assertThat(nodesProperties).containsExactly(":Book {title: STRING}", ":Person {name: STRING}");
         assertThat(relationshipsProperties).containsExactly(":WROTE {}");
     }
+
+    @Test
+    void shouldReturnANaturalLanguageResponse() {
+        // Given
+        Query query = new Query("Who is the author of the book 'Dune'?");
+        final String llmResponse = "The author of the book Dune is: Frank Herbert";
+        when(chatLanguageModel.chat(anyString()))
+                .thenReturn(
+                        """
+                                Mock response:
+                                ```
+                                cypher
+                                MATCH(book:Book {title: 'Dune'})<-[:WROTE]-(author:Person) RETURN author.name AS output
+                                ```
+                                """)
+                .thenReturn(llmResponse);
+
+        // When
+        final String response = retriever.fromLLM(query);
+
+        // Then
+        assertThat(response).isEqualTo(llmResponse);
+        
+    }
 }

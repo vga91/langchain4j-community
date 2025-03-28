@@ -32,6 +32,18 @@ public class Neo4jText2CypherRetriever implements ContentRetriever {
                     Cypher query:
                     """);
 
+    public static final PromptTemplate FROM_LLM_PROMPT_TEMPLATE = PromptTemplate.from(
+            """
+                    Based on the following context and the generated Cypher,
+                    write an answer in natural language to the provided user's question:
+                    Context: {{context}}
+                    
+                    Generated Cypher: {{cypher}}
+
+                    Question: {{question}}
+                    Cypher query:
+                    """);
+
     private static final Pattern BACKTICKS_PATTERN = Pattern.compile("```(.*?)```", Pattern.MULTILINE | Pattern.DOTALL);
     private static final Type NODE = TypeSystem.getDefault().NODE();
     private static final Type RELATIONSHIP = TypeSystem.getDefault().RELATIONSHIP();
@@ -78,9 +90,16 @@ public class Neo4jText2CypherRetriever implements ContentRetriever {
         return promptTemplate;
     }
 
+    private record RetrieveResult(String cypherQuery, List<Content> contents) {}
+
     @Override
     public List<Content> retrieve(Query query) {
 
+        RetrieveResult result = getRetrieveResult(query);
+        return result.contents();
+    }
+
+    private RetrieveResult getRetrieveResult(Query query) {
         String question = query.text();
         String schema = graph.getSchema();
         String cypherQuery = generateCypherQuery(schema, question);
@@ -88,7 +107,17 @@ public class Neo4jText2CypherRetriever implements ContentRetriever {
         cypherQuery = getFixedCypherWithDSL(cypherQuery);
 
         List<String> response = executeQuery(cypherQuery);
-        return response.stream().map(Content::from).toList();
+        final List<Content> list = response.stream().map(Content::from).toList();
+        return new RetrieveResult(cypherQuery, list);
+    }
+
+    public String fromLLM(Query query) {
+        RetrieveResult result = getRetrieveResult(query);
+        
+        final Prompt apply = FROM_LLM_PROMPT_TEMPLATE.apply(
+                Map.of("context", result.contents(), "cypher", result.cypherQuery(), "question", query.text()));
+        String cypherQuery = chatLanguageModel.chat(apply.text());
+        return extractCypherPart(cypherQuery);
     }
 
     /**
@@ -120,6 +149,10 @@ public class Neo4jText2CypherRetriever implements ContentRetriever {
 
         Prompt cypherPrompt = promptTemplate.apply(Map.of("schema", schema, "question", question));
         String cypherQuery = chatLanguageModel.chat(cypherPrompt.text());
+        return extractCypherPart(cypherQuery);
+    }
+
+    private static String extractCypherPart(String cypherQuery) {
         Matcher matcher = BACKTICKS_PATTERN.matcher(cypherQuery);
         if (matcher.find()) {
             cypherQuery = matcher.group(1);
@@ -188,11 +221,11 @@ public class Neo4jText2CypherRetriever implements ContentRetriever {
         }
 
         /**
-         * @param relationships the list of relationships, if not null fix (if needed) the generated query via {@link org.neo4j.cypherdsl.core.renderer.Configuration.Builder#withRelationshipDefinition(Configuration.RelationshipDefinition)}
+         * @param relationships the contents of relationships, if not null fix (if needed) the generated query via {@link org.neo4j.cypherdsl.core.renderer.Configuration.Builder#withRelationshipDefinition(Configuration.RelationshipDefinition)}
          *                      for example, a List.of( "(Foo, WROTE, Baz)", "(Jack, KNOWS, John)" ),
          *                      will create configuration.withRelationshipDefinition(new RelationshipDefinition("Foo", "WROTE", "Baz"))
          *                                  .withRelationshipDefinition("Jack", "KNOWS", "John")
-         *                      (default is: empty list)
+         *                      (default is: empty contents)
          */
         public T relationships(List<String> relationships) {
             this.relationships = relationships;
