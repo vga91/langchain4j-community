@@ -14,10 +14,12 @@ import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.Session;
 import org.neo4j.driver.Value;
+import org.neo4j.driver.Value;
 import org.neo4j.driver.exceptions.ClientException;
 import org.neo4j.driver.summary.ResultSummary;
 
 public class Neo4jGraph implements AutoCloseable {
+    public record GraphSchema(List<String> nodesProperties, List<String> relationshipsProperties, List<String> patterns) {}
 
     public static class Builder {
         private String label;
@@ -76,38 +78,24 @@ public class Neo4jGraph implements AutoCloseable {
             return new Neo4jGraph(driver, idProperty, label, textProperty);
         }
     }
-
     /* default configs */
     public static final String DEFAULT_ID_PROP = "id";
     public static final String DEFAULT_TEXT_PROP = "text";
     public static final String DEFAULT_LABEL = "__Entity__";
-
-    private static final String NODE_PROPERTIES_QUERY =
+    private static final String SCHEMA_FROM_META_DATA =
             """
-                    CALL apoc.meta.data()
-                    YIELD label, other, elementType, type, property
-                    WHERE NOT type = "RELATIONSHIP" AND elementType = "node"
-                    WITH label AS nodeLabels, collect({property:property, type:type}) AS properties
-                    RETURN {labels: nodeLabels, properties: properties} AS output
-                    """;
-
-    private static final String REL_PROPERTIES_QUERY =
-            """
-                    CALL apoc.meta.data()
-                    YIELD label, other, elementType, type, property
-                    WHERE NOT type = "RELATIONSHIP" AND elementType = "relationship"
-                    WITH label AS nodeLabels, collect({property:property, type:type}) AS properties
-                    RETURN {type: nodeLabels, properties: properties} AS output
-                    """;
-
-    private static final String RELATIONSHIPS_QUERY =
-            """
-                    CALL apoc.meta.data()
-                    YIELD label, other, elementType, type, property
-                    WHERE type = "RELATIONSHIP" AND elementType = "node"
-                    UNWIND other AS other_node
-                    RETURN {start: label, type: property, end: toString(other_node)} AS output
-                    """;
+            CALL apoc.meta.data({maxRels: $maxRels, sample: $sample})
+            YIELD label, other, elementType, type, property
+            WITH label, elementType,
+                 apoc.text.join(collect(case when NOT type = "RELATIONSHIP" then property+": "+type else null end),", ") AS properties,
+                 collect(case when type = "RELATIONSHIP" AND elementType = "node" then "(:" + label + ")-[:" + property + "]->(:" + toString(other[0]) + ")" else null end) AS patterns
+            WITH elementType AS type,
+                collect(":"+label+" {"+properties+"}") AS entities,
+                apoc.coll.flatten(collect(coalesce(patterns,[]))) AS patterns
+            RETURN collect(case type when "relationship" then entities end)[0] AS relationships,
+                collect(case type when "node" then entities end)[0] AS nodes,
+                collect(case type when "node" then patterns end)[0] as patterns
+            """;
 
     private final Driver driver;
     final String label;
@@ -117,6 +105,7 @@ public class Neo4jGraph implements AutoCloseable {
     final String textProperty;
     final String sanitizedTextProperty;
     private String schema;
+    private GraphSchema structuredSchema;
 
     public Neo4jGraph(final Driver driver, String idProperty, String label, String textProperty) {
         this.label = getOrDefault(label, DEFAULT_LABEL);
@@ -138,6 +127,10 @@ public class Neo4jGraph implements AutoCloseable {
             }
             throw e;
         }
+    }
+
+    public GraphSchema getStructuredSchema() {
+        return structuredSchema;
     }
 
     public String getSchema() {
@@ -167,16 +160,22 @@ public class Neo4jGraph implements AutoCloseable {
     }
 
     public void refreshSchema() {
+        final Record record = executeRead(SCHEMA_FROM_META_DATA, Map.of("sample", sample, "maxRels", maxRels))
+                .get(0);
+        final List<String> nodes = record.get("nodes").asList(Value::asString);
+        final List<String> relationships = record.get("relationships").asList(Value::asString);
+        final List<String> patterns = record.get("patterns").asList(Value::asString);
+        this.structuredSchema = new GraphSchema(nodes, relationships, patterns);
 
-        List<String> nodeProperties = formatNodeProperties(executeRead(NODE_PROPERTIES_QUERY));
-        List<String> relationshipProperties = formatRelationshipProperties(executeRead(REL_PROPERTIES_QUERY));
-        List<String> relationships = formatRelationships(executeRead(RELATIONSHIPS_QUERY));
 
-        this.schema = "Node properties are the following:\n" + String.join("\n", nodeProperties)
+        final String nodesString = String.join(", ", nodes);
+        final String relationshipsString = String.join(", ", relationships);
+        final String patternsString = String.join(", ", patterns);
+        this.schema = "Node properties are the following:\n" + nodesString
                 + "\n\n" + "Relationship properties are the following:\n"
-                + String.join("\n", relationshipProperties)
+                + relationshipsString
                 + "\n\n" + "The relationships are the following:\n"
-                + String.join("\n", relationships);
+                + patternsString;
     }
 
     private List<String> formatNodeProperties(List<Record> records) {

@@ -94,4 +94,48 @@ public class Neo4JText2CypherRetrieverTest extends Neo4jText2CypherRetrieverBase
         // Then
         assertThat(contents).isEmpty();
     }
+
+    @Test
+    void shouldThrowsErrorWhenCypherQueryIsInvalid() {
+        // Given
+        Query query = new Query("Who is the author of the movie 'Dune'?");
+        when(chatLanguageModel.chat(anyString()))
+                .thenReturn("MATCH(movie:Movie {title: 'Dune'}) RETURN author.name AS output");
+
+        try {
+            retriever.retrieve(query);
+        } catch (RuntimeException e) {
+            assertThat(e.getMessage()).contains("Variable `author` not defined");
+        }
+    }
+
+    @Test
+    void shouldThrowsErrorWhenNeo4jGraphQueryIsInvalid() {
+        final String invalidQuery = "MATCH(movie:Movie {title: 'Dune'}) RETURN author.name AS output";
+
+        try {
+            graph.executeRead(invalidQuery);
+        } catch (RuntimeException e) {
+            assertThat(e.getMessage()).contains("Variable `author` not defined");
+        }
+
+        try {
+            graph.executeWrite(invalidQuery);
+        } catch (RuntimeException e) {
+            assertThat(e.getCause().getMessage()).contains("Variable `author` not defined");
+        }
+    }
+
+    @Test
+    void shouldReturnCorrectStructuredSchema() {
+        final Neo4jGraph.GraphSchema structuredSchema = graph.getStructuredSchema();
+
+        final List<String> patterns = structuredSchema.patterns();
+        final List<String> nodesProperties = structuredSchema.nodesProperties();
+        final List<String> relationshipsProperties = structuredSchema.relationshipsProperties();
+        
+        assertThat(patterns).containsExactly("(:Person)-[:WROTE]->(:Book)");
+        assertThat(nodesProperties).containsExactly(":Book {title: STRING}", ":Person {name: STRING}");
+        assertThat(relationshipsProperties).containsExactly(":WROTE {}");
+    }
 }
