@@ -15,10 +15,23 @@ public class Neo4jUtils {
     public static String getBacktickText(String cypherQuery) {
         Matcher matcher = BACKTICKS_PATTERN.matcher(cypherQuery);
         if (matcher.find()) {
-            return matcher.group(1);
+            cypherQuery = matcher.group(1);
         }
+
+        /*
+        Sometimes, `cypher` is generated as a prefix, e.g.
+        ```
+        cypher
+        MATCH (p:Person)-[:WROTE]->(b:Book {title: 'Dune'}) RETURN p.name AS author
+        ```
+         */
+        if (cypherQuery.startsWith("cypher\n")) {
+            cypherQuery = cypherQuery.replaceFirst("cypher\n", "");
+        }
+
         return cypherQuery;
     }
+
 
     public static String sanitizeOrThrows(String value, String config) {
         return sanitize(value).orElseThrow(() -> {

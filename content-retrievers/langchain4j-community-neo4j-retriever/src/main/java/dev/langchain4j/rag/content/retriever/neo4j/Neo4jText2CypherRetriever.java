@@ -28,6 +28,18 @@ public class Neo4jText2CypherRetriever implements ContentRetriever {
                     Cypher query:
                     """);
 
+    public static final PromptTemplate FROM_LLM_PROMPT_TEMPLATE = PromptTemplate.from(
+            """
+                    Based on the following context and the generated Cypher,
+                    write an answer in natural language to the provided user's question:
+                    Context: {{context}}
+                    
+                    Generated Cypher: {{cypher}}
+
+                    Question: {{question}}
+                    Cypher query:
+                    """);
+
     private static final Pattern BACKTICKS_PATTERN = Pattern.compile("```(.*?)```", Pattern.MULTILINE | Pattern.DOTALL);
     private static final Type NODE = TypeSystem.getDefault().NODE();
     private static final Type RELATIONSHIP = TypeSystem.getDefault().RELATIONSHIP();
@@ -66,14 +78,31 @@ public class Neo4jText2CypherRetriever implements ContentRetriever {
         return promptTemplate;
     }
 
+    private record RetrieveResult(String cypherQuery, List<Content> contents) {}
+
     @Override
     public List<Content> retrieve(Query query) {
 
+        RetrieveResult result = getRetrieveResult(query);
+        return result.contents();
+    }
+
+    private RetrieveResult getRetrieveResult(Query query) {
         String question = query.text();
         String schema = graph.getSchema();
         String cypherQuery = generateCypherQuery(schema, question);
         List<String> response = executeQuery(cypherQuery);
-        return response.stream().map(Content::from).toList();
+        final List<Content> list = response.stream().map(Content::from).toList();
+        return new RetrieveResult(cypherQuery, list);
+    }
+
+    public String fromLLM(Query query) {
+        RetrieveResult result = getRetrieveResult(query);
+        
+        final Prompt apply = FROM_LLM_PROMPT_TEMPLATE.apply(
+                Map.of("context", result.contents(), "cypher", result.cypherQuery(), "question", query.text()));
+        String cypherQuery = chatLanguageModel.chat(apply.text());
+        return getBacktickText(cypherQuery);
     }
 
     private String generateCypherQuery(String schema, String question) {
