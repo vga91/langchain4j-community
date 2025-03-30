@@ -13,23 +13,22 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 @EnabledIfEnvironmentVariable(named = "OPENAI_API_KEY", matches = ".+")
 class Neo4JText2CypherRetrieverIT extends Neo4jText2CypherRetrieverBaseTest {
+    
+    private static final ChatLanguageModel OPEN_AI_CHAT_MODEL = OpenAiChatModel.builder()
+            .baseUrl(System.getenv("OPENAI_BASE_URL"))
+            .apiKey(System.getenv("OPENAI_API_KEY"))
+            .organizationId(System.getenv("OPENAI_ORGANIZATION_ID"))
+            .modelName(GPT_4_O_MINI)
+            .logRequests(true)
+            .logResponses(true)
+            .build();
 
     @Test
     void shouldRetrieveContentWhenQueryIsValidAndOpenAiChatModelIsUsed() {
-
         // With
-        ChatLanguageModel openAiChatModel = OpenAiChatModel.builder()
-                .baseUrl(System.getenv("OPENAI_BASE_URL"))
-                .apiKey(System.getenv("OPENAI_API_KEY"))
-                .organizationId(System.getenv("OPENAI_ORGANIZATION_ID"))
-                .modelName(GPT_4_O_MINI)
-                .logRequests(true)
-                .logResponses(true)
-                .build();
-
         Neo4jText2CypherRetriever neo4jContentRetriever = Neo4jText2CypherRetriever.builder()
                 .graph(graph)
-                .chatLanguageModel(openAiChatModel)
+                .chatLanguageModel(OPEN_AI_CHAT_MODEL)
                 .build();
 
         // Given
@@ -40,5 +39,24 @@ class Neo4JText2CypherRetrieverIT extends Neo4jText2CypherRetrieverBaseTest {
 
         // Then
         assertThat(contents).hasSize(1);
+    }
+
+    @Test
+    void shouldReturnANaturalLanguageResponse() {
+        // With
+        Neo4jText2CypherRetriever neo4jContentRetriever = Neo4jText2CypherRetriever.builder()
+                .graph(graph)
+                .chatLanguageModel(OPEN_AI_CHAT_MODEL)
+                .build();
+
+        // Given
+        Query query = new Query("Who is the author of the book 'Dune'?");
+
+        // When
+        String response = neo4jContentRetriever.fromLLM(query);
+
+        // Then
+        assertThat(response).containsIgnoringCase("author");
+        assertThat(response).containsIgnoringCase("Frank Herbert");
     }
 }
