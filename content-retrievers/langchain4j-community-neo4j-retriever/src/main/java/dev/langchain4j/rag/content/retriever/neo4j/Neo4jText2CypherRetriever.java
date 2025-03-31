@@ -2,6 +2,7 @@ package dev.langchain4j.rag.content.retriever.neo4j;
 
 import static dev.langchain4j.internal.Utils.getOrDefault;
 import static dev.langchain4j.internal.ValidationUtils.ensureNotNull;
+import static dev.langchain4j.rag.transformer.Neo4jUtils.getBacktickText;
 
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.input.Prompt;
@@ -11,7 +12,6 @@ import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.query.Query;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.types.Type;
@@ -23,6 +23,18 @@ public class Neo4jText2CypherRetriever implements ContentRetriever {
             """
                     Based on the Neo4j graph schema below, write a Cypher query that would answer the user's question:
                     {{schema}}
+
+                    Question: {{question}}
+                    Cypher query:
+                    """);
+
+    public static final PromptTemplate FROM_LLM_PROMPT_TEMPLATE = PromptTemplate.from(
+            """
+                    Based on the following context and the generated Cypher,
+                    write an answer in natural language to the provided user's question:
+                    Context: {{context}}
+                    
+                    Generated Cypher: {{cypher}}
 
                     Question: {{question}}
                     Cypher query:
@@ -66,25 +78,38 @@ public class Neo4jText2CypherRetriever implements ContentRetriever {
         return promptTemplate;
     }
 
+    private record RetrieveResult(String cypherQuery, List<Content> contents) {}
+
     @Override
     public List<Content> retrieve(Query query) {
 
+        RetrieveResult result = getRetrieveResult(query);
+        return result.contents();
+    }
+
+    private RetrieveResult getRetrieveResult(Query query) {
         String question = query.text();
         String schema = graph.getSchema();
         String cypherQuery = generateCypherQuery(schema, question);
         List<String> response = executeQuery(cypherQuery);
-        return response.stream().map(Content::from).toList();
+        final List<Content> list = response.stream().map(Content::from).toList();
+        return new RetrieveResult(cypherQuery, list);
+    }
+
+    public String fromLLM(Query query) {
+        RetrieveResult result = getRetrieveResult(query);
+        
+        final Prompt apply = FROM_LLM_PROMPT_TEMPLATE.apply(
+                Map.of("context", result.contents(), "cypher", result.cypherQuery(), "question", query.text()));
+        String cypherQuery = chatLanguageModel.chat(apply.text());
+        return getBacktickText(cypherQuery);
     }
 
     private String generateCypherQuery(String schema, String question) {
 
         Prompt cypherPrompt = promptTemplate.apply(Map.of("schema", schema, "question", question));
         String cypherQuery = chatLanguageModel.chat(cypherPrompt.text());
-        Matcher matcher = BACKTICKS_PATTERN.matcher(cypherQuery);
-        if (matcher.find()) {
-            return matcher.group(1);
-        }
-        return cypherQuery;
+        return getBacktickText(cypherQuery);
     }
 
     private List<String> executeQuery(String cypherQuery) {
