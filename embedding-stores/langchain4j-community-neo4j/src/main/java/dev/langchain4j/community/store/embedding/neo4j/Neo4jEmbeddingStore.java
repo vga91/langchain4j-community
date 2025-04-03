@@ -23,6 +23,11 @@ import static dev.langchain4j.internal.ValidationUtils.ensureNotEmpty;
 import static dev.langchain4j.internal.ValidationUtils.ensureNotNull;
 import static dev.langchain4j.internal.ValidationUtils.ensureTrue;
 import static java.util.Collections.singletonList;
+import static org.neo4j.cypherdsl.core.Cypher.literalOf;
+import static org.neo4j.cypherdsl.core.Cypher.match;
+import static org.neo4j.cypherdsl.core.Cypher.name;
+import static org.neo4j.cypherdsl.core.Cypher.parameter;
+import static org.neo4j.cypherdsl.core.Cypher.size;
 
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
@@ -41,6 +46,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import org.neo4j.cypherdsl.core.Condition;
+import org.neo4j.cypherdsl.core.Cypher;
+import org.neo4j.cypherdsl.core.Expression;
+import org.neo4j.cypherdsl.core.FunctionInvocation;
+import org.neo4j.cypherdsl.core.Statement;
+import org.neo4j.cypherdsl.core.renderer.Renderer;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
@@ -320,6 +332,48 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
     */
     private EmbeddingSearchResult getSearchResUsingVectorSimilarity(
             EmbeddingSearchRequest request, Filter filter, Value embeddingValue, Session session) {
+
+        // Match Clause
+        var node = Cypher.node(this.label).named("n");
+
+        // WHERE conditions
+        Condition condition = node.property(this.embeddingProperty).isNotNull()
+                .and(size(node.property(this.embeddingProperty)).eq(literalOf(this.dimension)));
+//        TODO        .and(raw(additionalCondition)); // Raw condition for additional filters
+
+        final FunctionInvocation.FunctionDefinition functionDefinition = new FunctionInvocation.FunctionDefinition() {
+
+            @Override
+            public String getImplementationName() {
+                return "vector.similarity.cosine";
+            }
+
+            @Override
+            public boolean isAggregate() {
+                return false;
+            }
+        };
+        // Cosine similarity
+        Expression similarity = FunctionInvocation.create(functionDefinition, node.property(this.embeddingProperty), literalOf(embeddingValue));
+//        Expression similarity = FunctionInvocation.create(functionDefinition, node.property(this.embeddingProperty), parameter("vectorParam"));
+
+        // Filtering by score
+        Condition scoreCondition = similarity.gte(parameter("minScore"));
+
+        // Final query construction
+        Statement statement = match(node)
+                .where(condition)
+                .with(node, similarity.as("score"))
+                .where(scoreCondition)
+                .returning(node.as("node"), name("score"))
+                .orderBy(name("score")).descending()
+                .limit(parameter("maxResults"))
+                .build();
+
+        // Render the Cypher query
+        String cypherQuery = Renderer.getDefaultRenderer().render(statement);
+        System.out.println(cypherQuery);
+        
         final AbstractMap.SimpleEntry<String, Map<?, ?>> entry = new Neo4jFilterMapper().map(filter);
         final String query =
                 """
