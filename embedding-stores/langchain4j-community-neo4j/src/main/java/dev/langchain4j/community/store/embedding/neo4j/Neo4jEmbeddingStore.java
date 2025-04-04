@@ -15,6 +15,7 @@ import static dev.langchain4j.community.store.embedding.neo4j.Neo4jEmbeddingUtil
 import static dev.langchain4j.community.store.embedding.neo4j.Neo4jEmbeddingUtils.getRowsBatched;
 import static dev.langchain4j.community.store.embedding.neo4j.Neo4jEmbeddingUtils.sanitizeOrThrows;
 import static dev.langchain4j.community.store.embedding.neo4j.Neo4jEmbeddingUtils.toEmbeddingMatch;
+import static dev.langchain4j.community.store.embedding.neo4j.Neo4jFilterMapper.toCypherLiteral;
 import static dev.langchain4j.internal.Utils.getOrDefault;
 import static dev.langchain4j.internal.Utils.isNullOrEmpty;
 import static dev.langchain4j.internal.Utils.randomUUID;
@@ -338,7 +339,7 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
 
         // WHERE conditions
         Condition condition = node.property(this.embeddingProperty).isNotNull()
-                .and(size(node.property(this.embeddingProperty)).eq(literalOf(this.dimension)));
+                .and(size(node.property(this.embeddingProperty)).eq(toCypherLiteral(this.dimension)));
 //        TODO        .and(raw(additionalCondition)); // Raw condition for additional filters
 
         final FunctionInvocation.FunctionDefinition functionDefinition = new FunctionInvocation.FunctionDefinition() {
@@ -354,7 +355,7 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
             }
         };
         // Cosine similarity
-        Expression similarity = FunctionInvocation.create(functionDefinition, node.property(this.embeddingProperty), literalOf(embeddingValue));
+        Expression similarity = FunctionInvocation.create(functionDefinition, node.property(this.embeddingProperty), toCypherLiteral(embeddingValue));
 //        Expression similarity = FunctionInvocation.create(functionDefinition, node.property(this.embeddingProperty), parameter("vectorParam"));
 
         // Filtering by score

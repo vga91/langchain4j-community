@@ -21,6 +21,7 @@ import org.neo4j.cypherdsl.core.Expression;
 import org.neo4j.cypherdsl.core.MapExpression;
 import org.neo4j.cypherdsl.core.Node;
 import org.neo4j.cypherdsl.core.StatementBuilder;
+import org.neo4j.driver.internal.value.ListValue;
 import org.neo4j.driver.internal.value.PointValue;
 import org.neo4j.driver.types.Point;
 
@@ -30,6 +31,7 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.OffsetTime;
 import java.util.AbstractMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -61,6 +63,12 @@ public class Neo4jFilterMapper {
         }
         else if (value instanceof Map) {
             return mapOf(value); // Convert Java Map to Cypher Map
+        }
+        
+        else if (value instanceof ListValue value1) {
+            return literalOf(value1.asList());
+//            System.out.println("value = " + value);
+//            return null;
         }
 
         // Other types
