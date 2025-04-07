@@ -1,6 +1,7 @@
 package dev.langchain4j.rag.content.retriever.neo4j;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
@@ -47,6 +48,32 @@ public class Neo4JText2CypherRetrieverTest extends Neo4jText2CypherRetrieverBase
     }
 
     @Test
+    void shouldRetrieveContentWhenQueryIsValidWithCypherDSLFixing() {
+        // Given
+        Query query = new Query("Who is the author of the book 'Dune'?");
+        when(chatLanguageModel.chat(anyString()))
+                .thenReturn("MATCH(book:Book {title: 'Dune'})-[:WROTE]->(author:Person) RETURN author.name AS output");
+
+        // When
+        List<Content> contents = retriever.retrieve(query);
+
+        // Then
+        assertThat(contents).hasSize(0);
+
+        retriever = Neo4jText2CypherRetriever.builder()
+                .graph(graph)
+                .chatLanguageModel(chatLanguageModel)
+                .relationships(List.of("(Person, WROTE, Book)"))
+                .build();
+
+        // When
+        List<Content> contentsWithCypherDSL = retriever.retrieve(query);
+
+        // Then
+        assertThat(contentsWithCypherDSL).hasSize(1);
+    }
+
+    @Test
     void shouldRetrieveContentWhenQueryIsValidWithDeprecatedClass() {
         // Given
         Query query = new Query("Who is the author of the book 'Dune'?");
@@ -81,7 +108,17 @@ public class Neo4JText2CypherRetrieverTest extends Neo4jText2CypherRetrieverBase
     }
 
     @Test
-    void shouldReturnEmptyListWhenQueryIsInvalid() {
+    void shouldReturnArithmeticException() {
+        try {
+            Neo4jGraph.builder().driver(driver).sample(0L).maxRels(0L).build();
+            fail("Should fail due to ArithmeticException");
+        } catch (RuntimeException e) {
+            assertThat(e.getMessage()).contains("java.lang.ArithmeticException: / by zero");
+        }
+    }
+
+    @Test
+    void shouldReturnEmptyListWhenQueryHasNoResults() {
         // Given
         Query query = new Query("Who is the author of the movie 'Dune'?");
         when(chatLanguageModel.chat(anyString()))
@@ -93,5 +130,73 @@ public class Neo4JText2CypherRetrieverTest extends Neo4jText2CypherRetrieverBase
 
         // Then
         assertThat(contents).isEmpty();
+    }
+
+    @Test
+    void shouldThrowsErrorWhenCypherQueryIsInvalid() {
+        // Given
+        Query query = new Query("Who is the author of the movie 'Dune'?");
+        when(chatLanguageModel.chat(anyString()))
+                .thenReturn("MATCH(movie:Movie {title: 'Dune'}) RETURN author.name AS output");
+
+        try {
+            retriever.retrieve(query);
+        } catch (RuntimeException e) {
+            assertThat(e.getMessage()).contains("Variable `author` not defined");
+        }
+    }
+
+    @Test
+    void shouldThrowsErrorWhenNeo4jGraphQueryIsInvalid() {
+        final String invalidQuery = "MATCH(movie:Movie {title: 'Dune'}) RETURN author.name AS output";
+
+        try {
+            graph.executeRead(invalidQuery);
+        } catch (RuntimeException e) {
+            assertThat(e.getMessage()).contains("Variable `author` not defined");
+        }
+
+        try {
+            graph.executeWrite(invalidQuery);
+        } catch (RuntimeException e) {
+            assertThat(e.getCause().getMessage()).contains("Variable `author` not defined");
+        }
+    }
+
+    @Test
+    void shouldReturnCorrectStructuredSchema() {
+        final Neo4jGraph.GraphSchema structuredSchema = graph.getStructuredSchema();
+
+        final List<String> patterns = structuredSchema.patterns();
+        final List<String> nodesProperties = structuredSchema.nodesProperties();
+        final List<String> relationshipsProperties = structuredSchema.relationshipsProperties();
+        
+        assertThat(patterns).containsExactly("(:Person)-[:WROTE]->(:Book)");
+        assertThat(nodesProperties).containsExactly(":Book {title: STRING}", ":Person {name: STRING}");
+        assertThat(relationshipsProperties).containsExactly(":WROTE {}");
+    }
+
+    @Test
+    void shouldReturnANaturalLanguageResponse() {
+        // Given
+        Query query = new Query("Who is the author of the book 'Dune'?");
+        final String llmResponse = "The author of the book Dune is: Frank Herbert";
+        when(chatLanguageModel.chat(anyString()))
+                .thenReturn(
+                        """
+                                Mock response:
+                                ```
+                                cypher
+                                MATCH(book:Book {title: 'Dune'})<-[:WROTE]-(author:Person) RETURN author.name AS output
+                                ```
+                                """)
+                .thenReturn(llmResponse);
+
+        // When
+        final String response = retriever.fromLLM(query);
+
+        // Then
+        assertThat(response).isEqualTo(llmResponse);
+        
     }
 }
