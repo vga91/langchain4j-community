@@ -56,7 +56,7 @@ public class Neo4jGraph implements AutoCloseable {
                     RETURN {start: label, type: property, end: toString(other_node)} AS output
                     """;
 
-    private final Driver driver;
+    public final Driver driver;
 
     private String schema;
 
