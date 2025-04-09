@@ -1,4 +1,4 @@
-package dev.langchain4j.community.store.memory.chat.redis;
+package dev.langchain4j.community.store.memory.chat.neo4j.redis;
 
 public class RedisChatMemoryStoreException extends RuntimeException {
 

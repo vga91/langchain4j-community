@@ -1,4 +1,4 @@
-package dev.langchain4j.community.store.memory.chat.redis;
+package dev.langchain4j.community.store.memory.chat.neo4j.redis;
 
 import static com.redis.testcontainers.RedisContainer.DEFAULT_IMAGE_NAME;
 import static com.redis.testcontainers.RedisContainer.DEFAULT_TAG;
