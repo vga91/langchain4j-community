@@ -4,18 +4,17 @@ import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ChatMessageDeserializer;
 import dev.langchain4j.data.message.ChatMessageSerializer;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
+import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
+import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.Session;
 import org.neo4j.driver.SessionConfig;
+import org.neo4j.driver.exceptions.Neo4jException;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-// TODO - dico che lo metto in embedding-stores come RedisChatMemoryStoreIT
-// TODO - builder
-
-//import static dev.langchain4j.community.store.embedding.neo4j.Neo4jEmbeddingUtils.sanitizeOrThrows;
 import static dev.langchain4j.internal.Utils.getOrDefault;
 import static dev.langchain4j.internal.ValidationUtils.ensureNotEmpty;
 import static dev.langchain4j.internal.ValidationUtils.ensureNotNull;
@@ -40,8 +39,6 @@ public class Neo4jChatMemoryStore implements ChatMemoryStore {
     private final String messageProperty;
     private final long window;
     
-    // TODO - withBasicAuth like embeddingStore
-
     /**
      * TODO
      * 
@@ -58,42 +55,34 @@ public class Neo4jChatMemoryStore implements ChatMemoryStore {
         /* optional configs */
         String dbName = getOrDefault(databaseName, DEFAULT_DATABASE_NAME);
         this.config = getOrDefault(config, SessionConfig.forDatabase(dbName));
-        // TODO - sanitized label??
         this.memoryLabel = getOrDefault(memoryLabel, DEFAULT_MEMORY_LABEL);
         this.messageLabel = getOrDefault(messageLabel, DEFAULT_LABEL_MESSAGE);
         this.lastMessageRelType = getOrDefault(lastMessageRelType, DEFAULT_REL_TYPE);
         this.nextMessageRelType = getOrDefault(nextMessageRelType, DEFAULT_REL_TYPE_NEXT);
         this.idProperty = getOrDefault(idProperty, DEFAULT_ID_PROP);
         this.messageProperty = getOrDefault(messageProperty, DEFAULT_MESSAGE_PROP);
-        // TODO - to string..
         this.window = getOrDefault(window, DEFAULT_WINDOW_VALUE);
-
-        /* sanitize labels and property names, to prevent from Cypher Injections */
-//        this.sanitizedLabel = sanitizeOrThrows(this.label, "label");
-//        this.sanitizedRelType = sanitizeOrThrows(this.relType, "relType");
     }
 
     public static Builder builder() {
         return new Builder();
     }
 
-    private void createSessionNode(final Session session, final Object memoryId) {
-//        try (var session = session()) {
+    private void createSessionNode(final Object memoryId) {
+        try (var session = session()) {
             final Map<String, Object> params = Map.of("label", memoryLabel, "window", window, "memoryId", memoryId);
             final String query = String.format("MERGE (s:%s {%s: $memoryId})", memoryLabel, idProperty);
             session.run(query, params);
-//        }
+        } catch (Neo4jException e) {
+            getDescriptiveProcedureNotFoundError(e);
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     public List<ChatMessage> getMessages(final Object memoryIdObj) {
         final String memoryId = toMemoryIdString(memoryIdObj);
         try (var session = session()) {
-            
-            
-            // TODO
-
-//            ChatMessageDeserializer.messageFromJson(jsonString)
 
             String windowPar = this.window < 1 ? "" : Long.toString(this.window);
             final Map<String, Object> params = Map.of("label", memoryLabel, "window", windowPar, "memoryId", memoryId);
@@ -106,81 +95,33 @@ public class Neo4jChatMemoryStore implements ChatMemoryStore {
                     UNWIND reverse(nodes(p)) AS node
                     RETURN node.%6$s AS msg""",
                     memoryLabel, lastMessageRelType, nextMessageRelType, windowPar, idProperty, messageProperty);
-
-//            final String query = String.format("""
-//                    MATCH (s:%s)-[:LAST_MESSAGE]->(lastNode)
-//                    WHERE s.id = $memoryId MATCH p=(lastNode)<-[:NEXT*0..%s]-()
-//                    WITH p, length(p) AS length
-//                    ORDER BY length DESC LIMIT 1
-//                    UNWIND reverse(nodes(p)) AS node
-//                    RETURN node.message AS message""",
-//                    memoryLabel, windowPar);
             
             final List<ChatMessage> messages = session.run(query, params)
                     .stream()
-//                    .map(i -> i.get("message").asString(null))
                     .map(i -> i.get("msg").asString(null))
                     .filter(Objects::nonNull)
                     .map(ChatMessageDeserializer::messageFromJson)
                     .toList();
             return messages;
+        } catch (Neo4jException e) {
+            getDescriptiveProcedureNotFoundError(e);
+            throw new RuntimeException(e);
         }
-        //return List.of();
     }
 
     @Override
     public void updateMessages(final Object memoryIdObj, final List<ChatMessage> messages) {
         final String memoryId = toMemoryIdString(memoryIdObj);
-        /*
-                try {
-            refreshSchema();
-        } catch (ClientException e) {
-            if ("Neo.ClientError.Procedure.ProcedureNotFound".equals(e.code())) {
-                throw new Neo4jException("Please ensure the APOC plugin is installed in Neo4j", e);
-            }
-            throw e;
-        }
-         */
-        
-        // todo - unwind???
-        // final ChatMessage chatMessage = list.get(0);
-        // chatMessage.type();
 
         ensureNotEmpty(messages, "messages");
         final List<Map<String, String >> messagesValues = messages.stream()
                 .map(ChatMessageSerializer::messageToJson)
-//                .map(i -> Map.of("message", i))
                 .map(i -> Map.of(messageProperty, i))
                 .toList();
-        
-//        if (messagesValues.isEmpty()) {
-//            return;
-//        }
+
+        createSessionNode(memoryId);
 
         try (var session = session()) {
-            createSessionNode(session, memoryId);
-        }
-
-        try (var session = session()) {
-            // TODO - session id ??? is the memoryId <---
-
-//            final String query = String.format("""
-//                    MATCH (s:%s) WHERE s.id = $memoryId
-//                    OPTIONAL MATCH (s)-[lastRel:LAST_MESSAGE]->(lastNode)
-//                    CALL apoc.create.nodes([$label], $messages)
-//                    YIELD node
-//                    WITH collect(node) AS nodes, s, lastNode, lastRel
-//                    CALL apoc.nodes.link(nodes, 'NEXT', {avoidDuplicates: true})
-//                    WITH nodes[-1] AS new, s, lastNode, lastRel
-//                    CREATE (s)-[:LAST_MESSAGE]->(new)
-//                    //SET new += {type:$type, content:$content}
-//                    WITH new, lastRel, lastNode WHERE lastNode IS NOT NULL
-//                    
-//                    // TODO TODO - change NEXT
-//                    CREATE (lastNode)-[:NEXT]->(new)
-//                    DELETE lastRel
-//                    
-//                    """, memoryLabel);
             final String query = String.format("""
                     MATCH (s:%1$s) WHERE s.%4$s = $memoryId
                     OPTIONAL MATCH (s)-[lastRel:%2$s]->(lastNode)
@@ -190,23 +131,11 @@ public class Neo4jChatMemoryStore implements ChatMemoryStore {
                     CALL apoc.nodes.link(nodes, $relType, {avoidDuplicates: true})
                     WITH nodes[-1] AS new, s, lastNode, lastRel
                     CREATE (s)-[:%2$s]->(new)
-                    //SET new += {type:$type, content:$content}
                     WITH new, lastRel, lastNode WHERE lastNode IS NOT NULL
-
-                    // TODO TODO - change NEXT
                     CREATE (lastNode)-[:%3$s]->(new)
                     DELETE lastRel
 
-                    """, memoryLabel, lastMessageRelType, nextMessageRelType, idProperty);     
-            
-//            final String query = String.format("""
-//                    MATCH (s:%s) // WHERE s.id = $session_id
-//                    OPTIONAL MATCH (s)-[lm:LAST_MESSAGE]->(lastNode)
-//                    CREATE (s)-[:LAST_MESSAGE]->(new:Message)
-//                    SET new += {type:$type, content:$content}
-//                    WITH new, lm, lastNode WHERE lastNode IS NOT NULL
-//                    CREATE (lastNode)-[:NEXT]->(new)
-//                    DELETE lm""", label);
+                    """, memoryLabel, lastMessageRelType, nextMessageRelType, idProperty);
 
             final Map<String, Object> params = Map.of("memoryId", memoryId,
                     "relType", nextMessageRelType, 
@@ -215,8 +144,6 @@ public class Neo4jChatMemoryStore implements ChatMemoryStore {
                     "messages", messagesValues);
 
             session.run(query, params);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
         }
     }
 
@@ -224,37 +151,7 @@ public class Neo4jChatMemoryStore implements ChatMemoryStore {
     public void deleteMessages(final Object memoryIdObj) {
         final String memoryId = toMemoryIdString(memoryIdObj);
         try (var session = session()) {
-//            final String query = """
-//                    MATCH (s:%s) WHERE s.id = $memoryId
-//                    CALL apoc.path.spanningTree(start, {
-//                      relationshipFilter: "NEXT>",
-//                      uniqueness: "NODE_GLOBAL"
-//                    })
-//                    YIELD path
-//                    RETURN path
-//                    ORDER BY length(path) DESC
-//                    LIMIT 1
-//                    """;
 
-
-//            final String query = String.format("""
-//                    MATCH (s:%s)-[:LAST_MESSAGE]->(lastNode)
-//                    WHERE s.id = $memoryId
-//                    MATCH p=(lastNode)<-[:NEXT]-()
-//                    WITH p, length(p) AS length ORDER BY length DESC LIMIT 1
-//                    UNWIND nodes(p) as node DETACH DELETE node""", label);
-
-//            final String query = String.format("""
-//                    MATCH (s:%s)
-//                    WHERE s.id = $memoryId
-//                    OPTIONAL MATCH p=(s)-[lastRel:LAST_MESSAGE]->(lastNode)<-[:NEXT*0..]-()
-//                    WITH s, p, length(p) AS length ORDER BY length DESC LIMIT 1
-//                    //MATCH p=(lastNode)<-[:NEXT*0..]-()
-//                    DETACH DELETE s, p""", memoryLabel);
-//
-//            final Map<String, Object> params = Map.of("memoryId", memoryId,
-//                    "relType", nextMessageRelType,
-//                    "label", memoryLabel);
             final String query = String.format("""
                     MATCH (s:%1$s)
                     WHERE s.%4$s = $memoryId
@@ -270,12 +167,18 @@ public class Neo4jChatMemoryStore implements ChatMemoryStore {
 
             session.run(query, params);
 
-            System.out.println("params = " + params);
-        } catch (Exception e) {
+        } catch (Neo4jException e) {
+            getDescriptiveProcedureNotFoundError(e);
             throw new RuntimeException(e);
         }
     }
-    
+
+    private static void getDescriptiveProcedureNotFoundError(Neo4jException e) {
+        if ("Neo.ClientError.Procedure.ProcedureNotFound".equals(e.code())) {
+            throw new Neo4jException("Please ensure the APOC plugin is installed in Neo4j", e);
+        }
+    }
+
     private static String toMemoryIdString(Object memoryId) {
         boolean isNullOrEmpty = memoryId == null || memoryId.toString().trim().isEmpty();
         if (isNullOrEmpty) {
@@ -301,57 +204,96 @@ public class Neo4jChatMemoryStore implements ChatMemoryStore {
         private Long window;
 
         /**
-         * TODO: various descriptions
-         * @param driver
-         * @return
+         * @param driver the {@link Driver} (required)
          */
         public Builder driver(Driver driver) {
             this.driver = driver;
             return this;
         }
-
+        
+        /**
+         * @param config the {@link SessionConfig}  (optional, default is `SessionConfig.forDatabase(`databaseName`)`)
+         */
         public Builder config(SessionConfig config) {
             this.config = config;
             return this;
         }
 
+        /**
+         * @param memoryLabel TODO
+         */
         public Builder memoryLabel(String memoryLabel) {
             this.memoryLabel = memoryLabel;
             return this;
         }
 
+        /**
+         * @param messageLabel TODO
+         */
         public Builder messageLabel(String messageLabel) {
             this.messageLabel = messageLabel;
             return this;
         }
 
+        /**
+         * @param idProperty the optional memory id property name of the node (default: "id")
+         */
         public Builder idProperty(String idProperty) {
             this.idProperty = idProperty;
             return this;
         }
 
+        /**
+         * @param messageProperty TODO
+         */
         public Builder messageProperty(String messageProperty) {
             this.messageProperty = messageProperty;
             return this;
         }
 
+
+        /**
+         * @param lastMessageRelType TODO
+         */
         public Builder lastMessageRelType(String lastMessageRelType) {
             this.lastMessageRelType = lastMessageRelType;
             return this;
         }
 
+        /**
+         * @param nextMessageRelType TODO
+         */
         public Builder nextMessageRelType(String nextMessageRelType) {
             this.nextMessageRelType = nextMessageRelType;
             return this;
         }
 
+        /**
+         * @param databaseName the optional database name (default: "neo4j")
+         */
         public Builder databaseName(String databaseName) {
             this.databaseName = databaseName;
             return this;
         }
 
-        public Builder window(Long window) {
-            this.window = window;
+        /**
+         * @param size the optional message size to be retrieved from {@link Neo4jChatMemoryStore#getMessages(Object)}} (default: 10)
+         *             If the size is 0 or negative, all messages will be retrieved
+         */
+        public Builder size(Long size) {
+            this.window = size;
+            return this;
+        }
+        
+        /**
+         * Creates an instance a {@link Driver}, starting from uri, user and password
+         *
+         * @param uri      the Bolt URI to a Neo4j instance
+         * @param user     the Neo4j instance's username
+         * @param password the Neo4j instance's password
+         */
+        public Builder withBasicAuth(String uri, String user, String password) {
+            this.driver = GraphDatabase.driver(uri, AuthTokens.basic(user, password));
             return this;
         }
 

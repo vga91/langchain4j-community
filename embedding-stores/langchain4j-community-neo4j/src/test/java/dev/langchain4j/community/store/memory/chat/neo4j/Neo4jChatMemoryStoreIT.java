@@ -90,7 +90,7 @@ public class Neo4jChatMemoryStoreIT {
 
 
     @Test
-    void should_set_messages_into_neo4j() {
+    void should_set_and_uptate_messages_into_neo4j() {
         // given
         List<ChatMessage> messages = memoryStore.getMessages(messageId);
         assertThat(messages).isEmpty();
@@ -112,13 +112,26 @@ public class Neo4jChatMemoryStoreIT {
         final ArrayList<ChatMessage> chatMessages1 = new ArrayList<>(chatMessages);
         chatMessages1.addAll(chatNewMessages);
         assertThat(messages).isEqualTo(chatMessages1);
+    }
 
-        // TODO - check message contents
+    @Test
+    void should_init_memory_store_using_withBasicAuth() {
+        // given
+        List<ChatMessage> chatMessages = createChatMessages();
+        final Neo4jChatMemoryStore memoryStore = Neo4jChatMemoryStore.builder()
+                .withBasicAuth(neo4jContainer.getBoltUrl(), USERNAME, ADMIN_PASSWORD)
+                .build();
+        memoryStore.updateMessages(messageId, chatMessages);
+        List<ChatMessage> messages = memoryStore.getMessages(messageId);
+        assertThat(messages).hasSize(3);
+        assertThat(messages).isEqualTo(chatMessages);
         
-        // TODO - check entities - string format
-//        final String query = "MATCH p=(s:LABEL_TO_SANITIZE)-[lastRel:REL_TO_SANITIZE]->(lastNode:LABEL_TO_SANITIZE2)<-[:REL_TO_SANITIZE2]-(:LABEL_TO_SANITIZE2)<-[:REL_TO_SANITIZE2]-(:LABEL_TO_SANITIZE2) RETURN p";
-//         the single() method Throws `NoSuchRecordException`, if there is not exactly one record left in the stream
-//        extracted(query, idPropToSanitize, msgPropToSanitize);
+        // when
+        memoryStore.deleteMessages(messageId);
+        
+        // then
+        messages = memoryStore.getMessages(messageId);
+        assertThat(messages).isEmpty();
     }
 
     @Test
@@ -129,7 +142,10 @@ public class Neo4jChatMemoryStoreIT {
         List<ChatMessage> messages = memoryStore.getMessages(messageId);
         assertThat(messages).hasSize(3);
         assertThat(messages).isEqualTo(chatMessages);
-        // TODO - check message contents
+        // TODO - check entities - string format
+        // final String query = "MATCH p=(s:LABEL_TO_SANITIZE)-[lastRel:REL_TO_SANITIZE]->(lastNode:LABEL_TO_SANITIZE2)<-[:REL_TO_SANITIZE2]-(:LABEL_TO_SANITIZE2)<-[:REL_TO_SANITIZE2]-(:LABEL_TO_SANITIZE2) RETURN p";
+        // checkEntitiesCreated(query, DEFAULT_ID_PROP, DEFAULT_MESSAGE_PROP);
+
 
         // when
         memoryStore.deleteMessages(messageId);
@@ -137,40 +153,41 @@ public class Neo4jChatMemoryStoreIT {
         // then
         messages = memoryStore.getMessages(messageId);
         assertThat(messages).isEmpty();
+        // TODO - check no entities
     }
     
-//    @Test
-//    void should_only_delete_messages_with_correct_memory_id() {
-//        final String anotherMessageId = "anotherId";
-//        final List<ChatMessage> chatMessages1 = createChatMessages();
-//        memoryStore.updateMessages(messageId, chatMessages1);
-//
-//        final List<ChatMessage> chatMessages2 = createChatMessages();
-//        memoryStore.updateMessages(anotherMessageId, chatMessages2);
-//
-//        List<ChatMessage> messagesBefore = memoryStore.getMessages(messageId);
-//        assertThat(messagesBefore).hasSize(3);
-//        assertThat(messagesBefore).isEqualTo(chatMessages1);
-//
-//
-//        List<ChatMessage> messages2Before = memoryStore.getMessages(anotherMessageId);
-//        assertThat(messages2Before).hasSize(3);
-//        assertThat(messages2Before).isEqualTo(chatMessages2);
-//
-//
-//        memoryStore.deleteMessages(messageId);
-//
-//        List<ChatMessage> messagesAfterDelete = memoryStore.getMessages(messageId);
-//        assertThat(messagesAfterDelete).isEmpty();
-//
-//        List<ChatMessage> messages2AfterDelete = memoryStore.getMessages(anotherMessageId);
-//        assertThat(messages2AfterDelete).hasSize(3);
-//        assertThat(messages2AfterDelete).isEqualTo(chatMessages2);
-//        
-//        memoryStore.deleteMessages(anotherMessageId);
-//        List<ChatMessage> messagesAfter2ndDelete = memoryStore.getMessages(anotherMessageId);
-//        assertThat(messagesAfter2ndDelete).isEmpty();
-//    }
+    @Test
+    void should_only_delete_messages_with_correct_memory_id() {
+        final String anotherMessageId = "anotherId";
+        final List<ChatMessage> chatMessages1 = createChatMessages();
+        memoryStore.updateMessages(messageId, chatMessages1);
+
+        final List<ChatMessage> chatMessages2 = createChatMessages();
+        memoryStore.updateMessages(anotherMessageId, chatMessages2);
+
+        List<ChatMessage> messagesBefore = memoryStore.getMessages(messageId);
+        assertThat(messagesBefore).hasSize(3);
+        assertThat(messagesBefore).isEqualTo(chatMessages1);
+
+
+        List<ChatMessage> messages2Before = memoryStore.getMessages(anotherMessageId);
+        assertThat(messages2Before).hasSize(3);
+        assertThat(messages2Before).isEqualTo(chatMessages2);
+
+
+        memoryStore.deleteMessages(messageId);
+
+        List<ChatMessage> messagesAfterDelete = memoryStore.getMessages(messageId);
+        assertThat(messagesAfterDelete).isEmpty();
+
+        List<ChatMessage> messages2AfterDelete = memoryStore.getMessages(anotherMessageId);
+        assertThat(messages2AfterDelete).hasSize(3);
+        assertThat(messages2AfterDelete).isEqualTo(chatMessages2);
+
+        memoryStore.deleteMessages(anotherMessageId);
+        List<ChatMessage> messagesAfter2ndDelete = memoryStore.getMessages(anotherMessageId);
+        assertThat(messagesAfter2ndDelete).isEmpty();
+    }
 
     // TODO - custom label, relType
     @Test
@@ -203,17 +220,17 @@ public class Neo4jChatMemoryStoreIT {
         assertThat(list).isEmpty();
         final List<Record> list2 = driver.session().run("MATCH (n:Message) RETURN n").list();
         assertThat(list2).isEmpty();
-        //    
+        
         final String query = "MATCH p=(s:LABEL_TO_SANITIZE)-[lastRel:REL_TO_SANITIZE]->(lastNode:LABEL_TO_SANITIZE2)<-[:REL_TO_SANITIZE2]-(:LABEL_TO_SANITIZE2)<-[:REL_TO_SANITIZE2]-(:LABEL_TO_SANITIZE2) RETURN p";
-        // the single() method Throws `NoSuchRecordException`, if there is not exactly one record left in the stream
-        extracted(query, idPropToSanitize, msgPropToSanitize);
+        checkEntitiesCreated(query, idPropToSanitize, msgPropToSanitize);
 
         memoryStore.deleteMessages(messageId);
         List<ChatMessage> messagesAfterDelete = memoryStore.getMessages(messageId);
         assertThat(messagesAfterDelete).isEmpty();
     }
 
-    private void extracted(String query, String idPropToSanitize, String msgPropToSanitize) {
+    private void checkEntitiesCreated(String query, String idPropToSanitize, String msgPropToSanitize) {
+        // the single() method Throws `NoSuchRecordException`, if there is not exactly one record left in the stream
         final Record record = driver.session().run(query)
                 .single();
         final Path path = record.get("p").asPath();
@@ -235,7 +252,7 @@ public class Neo4jChatMemoryStoreIT {
         final long window = 3L;
         Neo4jChatMemoryStore memoryStore = Neo4jChatMemoryStore.builder()
                 .driver(driver)
-                .window(window)
+                .size(window)
                 .build();
         
         final List<ChatMessage> chatMessages1 = new ArrayList<>();
@@ -249,8 +266,8 @@ public class Neo4jChatMemoryStoreIT {
         assertThat(messages).hasSize((int) (window + 1));
         
         final List<ChatMessage> expectedChatMessages = new ArrayList<>();
+        expectedChatMessages.add(new AiMessage("baz"));
         expectedChatMessages.addAll(createChatMessages());
-        expectedChatMessages.add(new SystemMessage("foo"));
         assertThat(messages).isEqualTo(expectedChatMessages);
     }
 
@@ -271,10 +288,11 @@ public class Neo4jChatMemoryStoreIT {
         assertThat(messages).hasSize((int) (DEFAULT_WINDOW_VALUE + 1));
         
         final List<ChatMessage> expectedChatMessages = new ArrayList<>();
+        expectedChatMessages.add(new UserMessage("bar"));
+        expectedChatMessages.add(new AiMessage("baz"));
         expectedChatMessages.addAll(createChatMessages());
         expectedChatMessages.addAll(createChatMessages());
         expectedChatMessages.addAll(createChatMessages());
-        expectedChatMessages.add(new SystemMessage("foo"));
         assertThat(messages).isEqualTo(expectedChatMessages);
     }
 
@@ -282,7 +300,7 @@ public class Neo4jChatMemoryStoreIT {
     void should_search_all_messages() {
         Neo4jChatMemoryStore memoryStore = Neo4jChatMemoryStore.builder()
                 .driver(driver)
-                .window(0L)
+                .size(0L)
                 .build();
 
         final List<ChatMessage> chatMessages1 = new ArrayList<>();
