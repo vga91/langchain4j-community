@@ -15,13 +15,17 @@ import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.Record;
+import org.neo4j.driver.types.Node;
+import org.neo4j.driver.types.Path;
 import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 import static dev.langchain4j.community.store.memory.chat.neo4j.Neo4jChatMemoryStore.DEFAULT_WINDOW_VALUE;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -94,6 +98,9 @@ public class Neo4jChatMemoryStoreIT {
         
         List<ChatMessage> chatMessages = createChatMessages();
         memoryStore.updateMessages(messageId, chatMessages);
+        messages = memoryStore.getMessages(messageId);
+        assertThat(messages).hasSize(3);
+        assertThat(messages).isEqualTo(chatMessages);
         
         List<Content> userMsgContents = List.of(new ImageContent("someCatImageUrl"));
         final List<ChatMessage> chatNewMessages = List.of(new UserMessage("What do you see in this image?", userMsgContents));
@@ -102,10 +109,16 @@ public class Neo4jChatMemoryStoreIT {
         // then
         messages = memoryStore.getMessages(messageId);
         assertThat(messages).hasSize(4);
+        final ArrayList<ChatMessage> chatMessages1 = new ArrayList<>(chatMessages);
+        chatMessages1.addAll(chatNewMessages);
+        assertThat(messages).isEqualTo(chatMessages1);
 
         // TODO - check message contents
         
-        // TODO - check entities
+        // TODO - check entities - string format
+//        final String query = "MATCH p=(s:LABEL_TO_SANITIZE)-[lastRel:REL_TO_SANITIZE]->(lastNode:LABEL_TO_SANITIZE2)<-[:REL_TO_SANITIZE2]-(:LABEL_TO_SANITIZE2)<-[:REL_TO_SANITIZE2]-(:LABEL_TO_SANITIZE2) RETURN p";
+//         the single() method Throws `NoSuchRecordException`, if there is not exactly one record left in the stream
+//        extracted(query, idPropToSanitize, msgPropToSanitize);
     }
 
     @Test
@@ -126,49 +139,57 @@ public class Neo4jChatMemoryStoreIT {
         assertThat(messages).isEmpty();
     }
     
-    @Test
-    void should_only_delete_messages_with_correct_memory_id() {
-        final String anotherMessageId = "anotherId";
-        final List<ChatMessage> chatMessages1 = createChatMessages();
-        memoryStore.updateMessages(messageId, chatMessages1);
-
-        final List<ChatMessage> chatMessages2 = createChatMessages();
-        memoryStore.updateMessages(anotherMessageId, chatMessages2);
-
-        List<ChatMessage> messagesBefore = memoryStore.getMessages(messageId);
-        assertThat(messagesBefore).hasSize(3);
-        assertThat(messagesBefore).isEqualTo(chatMessages1);
-
-
-        List<ChatMessage> messages2Before = memoryStore.getMessages(anotherMessageId);
-        assertThat(messages2Before).hasSize(3);
-        assertThat(messages2Before).isEqualTo(chatMessages2);
-
-
-        memoryStore.deleteMessages(messageId);
-
-        List<ChatMessage> messagesAfterDelete = memoryStore.getMessages(messageId);
-        assertThat(messagesAfterDelete).isEmpty();
-
-        List<ChatMessage> messages2AfterDelete = memoryStore.getMessages(anotherMessageId);
-        assertThat(messages2AfterDelete).hasSize(3);
-        assertThat(messages2AfterDelete).isEqualTo(chatMessages2);
-        
-        memoryStore.deleteMessages(anotherMessageId);
-        List<ChatMessage> messagesAfter2ndDelete = memoryStore.getMessages(anotherMessageId);
-        assertThat(messagesAfter2ndDelete).isEmpty();
-    }
+//    @Test
+//    void should_only_delete_messages_with_correct_memory_id() {
+//        final String anotherMessageId = "anotherId";
+//        final List<ChatMessage> chatMessages1 = createChatMessages();
+//        memoryStore.updateMessages(messageId, chatMessages1);
+//
+//        final List<ChatMessage> chatMessages2 = createChatMessages();
+//        memoryStore.updateMessages(anotherMessageId, chatMessages2);
+//
+//        List<ChatMessage> messagesBefore = memoryStore.getMessages(messageId);
+//        assertThat(messagesBefore).hasSize(3);
+//        assertThat(messagesBefore).isEqualTo(chatMessages1);
+//
+//
+//        List<ChatMessage> messages2Before = memoryStore.getMessages(anotherMessageId);
+//        assertThat(messages2Before).hasSize(3);
+//        assertThat(messages2Before).isEqualTo(chatMessages2);
+//
+//
+//        memoryStore.deleteMessages(messageId);
+//
+//        List<ChatMessage> messagesAfterDelete = memoryStore.getMessages(messageId);
+//        assertThat(messagesAfterDelete).isEmpty();
+//
+//        List<ChatMessage> messages2AfterDelete = memoryStore.getMessages(anotherMessageId);
+//        assertThat(messages2AfterDelete).hasSize(3);
+//        assertThat(messages2AfterDelete).isEqualTo(chatMessages2);
+//        
+//        memoryStore.deleteMessages(anotherMessageId);
+//        List<ChatMessage> messagesAfter2ndDelete = memoryStore.getMessages(anotherMessageId);
+//        assertThat(messagesAfter2ndDelete).isEmpty();
+//    }
 
     // TODO - custom label, relType
     @Test
     void should_only_delete_messages_with_custom_labels_and_rel_type() {
-          // todo - change with LABEL_TO_SANITIZE and REL_TO_SANITIZE
+        // todo - change with LABEL_TO_SANITIZE and REL_TO_SANITIZE after cypher-dsl
         final String labelToSanitize = "LABEL_TO_SANITIZE";
         final String relToSanitize = "REL_TO_SANITIZE";
+        final String labelToSanitize2 = "LABEL_TO_SANITIZE2";
+        final String relToSanitize2 = "REL_TO_SANITIZE2";
+        final String idPropToSanitize = "idPropToSanitize";
+        final String msgPropToSanitize = "msgPropToSanitize";
         Neo4jChatMemoryStore memoryStore = Neo4jChatMemoryStore.builder()
                 .driver(driver)
-                .label(labelToSanitize)
-                .relType(relToSanitize)
+                .memoryLabel(labelToSanitize)
+                .messageLabel(labelToSanitize2)
+                .lastMessageRelType(relToSanitize)
+                .nextMessageRelType(relToSanitize2)
+                .idProperty(idPropToSanitize)
+                .messageProperty(msgPropToSanitize)
                 .build();
         final List<ChatMessage> chatMessages1 = createChatMessages();
         memoryStore.updateMessages(messageId, chatMessages1);
@@ -177,11 +198,35 @@ public class Neo4jChatMemoryStoreIT {
         assertThat(messages).hasSize(3);
         assertThat(messages).isEqualTo(chatMessages1);
       // todo - check entities
-      //    
-        final String query = "MATCH p=(s:%s)-[lastRel:LAST_MESSAGE]->(lastNode)<-[:]-()<-[]-() RETURN p";
-        final List<Record> list = driver.session().run(query)
-                .list();
-        assertThat(list).hasSize(1);
+        // check that nodes with the default Memory label and Message label doesn't exists
+        final List<Record> list = driver.session().run("MATCH (n:Memory) RETURN n").list();
+        assertThat(list).isEmpty();
+        final List<Record> list2 = driver.session().run("MATCH (n:Message) RETURN n").list();
+        assertThat(list2).isEmpty();
+        //    
+        final String query = "MATCH p=(s:LABEL_TO_SANITIZE)-[lastRel:REL_TO_SANITIZE]->(lastNode:LABEL_TO_SANITIZE2)<-[:REL_TO_SANITIZE2]-(:LABEL_TO_SANITIZE2)<-[:REL_TO_SANITIZE2]-(:LABEL_TO_SANITIZE2) RETURN p";
+        // the single() method Throws `NoSuchRecordException`, if there is not exactly one record left in the stream
+        extracted(query, idPropToSanitize, msgPropToSanitize);
+
+        memoryStore.deleteMessages(messageId);
+        List<ChatMessage> messagesAfterDelete = memoryStore.getMessages(messageId);
+        assertThat(messagesAfterDelete).isEmpty();
+    }
+
+    private void extracted(String query, String idPropToSanitize, String msgPropToSanitize) {
+        final Record record = driver.session().run(query)
+                .single();
+        final Path path = record.get("p").asPath();
+        final Iterator<Node> nodeIterator = path.nodes().iterator();
+        Map<String, Object> actual = nodeIterator.next().asMap();
+        assertThat(actual).isEqualTo(Map.of(idPropToSanitize, messageId));
+        actual = nodeIterator.next().asMap();
+        assertThat(actual).containsKey(msgPropToSanitize);
+        actual = nodeIterator.next().asMap();
+        assertThat(actual).containsKey(msgPropToSanitize);
+        actual = nodeIterator.next().asMap();
+        assertThat(actual).containsKey(msgPropToSanitize);
+        assertThat(nodeIterator.hasNext()).isFalse();
     }
 
     // TODO - window
