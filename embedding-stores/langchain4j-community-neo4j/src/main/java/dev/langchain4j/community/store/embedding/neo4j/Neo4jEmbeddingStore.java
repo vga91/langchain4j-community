@@ -106,8 +106,10 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
     private final String label;
     private final String sanitizedLabel;
     private final String textProperty;
-    private final String retrievalQuery;
+    private String retrievalQuery;
+    private final String entityCreationQuery;
     private final Set<String> notMetaKeys;
+    private Map<String, Object> additionalParams;
 
     private final String fullTextIndexName;
     private final String fullTextQuery;
@@ -134,6 +136,7 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
      * @param fullTextQuery          the optional full-text index query, required if we want to perform a hybrid search
      * @param fullTextRetrievalQuery the optional full-text retrieval query (default: {@param retrievalQuery})
      * @param autoCreateFullText     if true, it will auto create the full-text index if not exists (default: false)
+     * TODO -ENTITY CREATION QUERY
      */
     public Neo4jEmbeddingStore(
             SessionConfig config,
@@ -151,7 +154,9 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
             String fullTextIndexName,
             String fullTextQuery,
             String fullTextRetrievalQuery,
-            boolean autoCreateFullText) {
+            boolean autoCreateFullText,
+            String entityCreationQuery,
+            Map<String, Object> additionalParams) {
 
         /* required configs */
         this.driver = ensureNotNull(driver, "driver");
@@ -167,6 +172,7 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
         this.metadataPrefix = getOrDefault(metadataPrefix, "");
         this.textProperty = getOrDefault(textProperty, DEFAULT_TEXT_PROP);
         this.awaitIndexTimeout = getOrDefault(awaitIndexTimeout, DEFAULT_AWAIT_INDEX_TIMEOUT);
+        this.additionalParams = getOrDefault(additionalParams, Map.of());
 
         /* sanitize labels and property names, to prevent from Cypher Injections */
         this.sanitizedLabel = sanitizeOrThrows(this.label, "label");
@@ -194,6 +200,8 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
         this.autoCreateFullText = autoCreateFullText;
         this.fullTextIndexName = getOrDefault(fullTextIndexName, DEFAULT_FULLTEXT_IDX_NAME);
         this.fullTextQuery = fullTextQuery;
+        
+        this.entityCreationQuery = getOrDefault(entityCreationQuery, ENTITIES_CREATION);
 
         this.fullTextRetrievalQuery = getOrDefault(fullTextRetrievalQuery, this.retrievalQuery);
         //        fullTextRetrievalQuery = getOrDefault(fullTextRetrievalQuery, this.retrievalQuery);
@@ -234,6 +242,33 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
         return indexName;
     }
 
+    public String getRetrievalQuery() {
+        return retrievalQuery;
+    }
+
+    public String getSanitizedLabel() {
+        return sanitizedLabel;
+    }
+
+    public int getDimension() {
+        return dimension;
+    }
+
+    public String getSanitizedEmbeddingProperty() {
+        return sanitizedEmbeddingProperty;
+    }
+
+    public void setAdditionalParams(final Map<String, Object> additionalParams) {
+        this.additionalParams = additionalParams;
+    }
+
+    /*
+                    Setter methods
+                    */
+    public void setRetrievalQuery(final String retrievalQuery) {
+        this.retrievalQuery = retrievalQuery;
+    }
+    
     /*
     Methods with `@Override`
     */
@@ -369,6 +404,19 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
 
         bulk(ids, embeddings, embedded);
     }
+    
+    /*
+    "embeddingRow" -> {ListValue@6529} "[-0.026524638757109642, -0.0049698990769684315, -0.03773590922355652, 8.311812416650355E-4, -0.045361146330833435, -0.05414918437600136, 0.04813409596681595, 0.032315392047166824, -0.03977992758154869, 0.054457731544971466, -0.044797223061323166, -0.014842361211776733, 0.006301776506006718, -0.025549743324518204, -0.01874557137489319, 0.016981227323412895, -0.021157607436180115, -0.07563665509223938, -0.11616797745227814, -0.059066276997327805, 0.04228316247463226, 0.016090000048279762, -0.06302445381879807, -0.01577383652329445, -0.07865007221698761, 0.05927974358201027, 0.041187554597854614, -0.05429207161068916, -0.01881733536720276, 0.021137217059731483, 0.01002430822700262, 0.00553687009960413, 0.09383835643529892, 0.011911733075976372, -0.08533298969268799, 0.04888534173369408, -0.04320313781499863, 0.0027526335325092077, 0.05821312591433525, -0.04337746649980545, -0.028129542246460915, -0.047099411487579346, 7.216354133561254E-4, -0.03237574175000191, 0.07240018993616104, 0.1488"
+"id" -> "2f8a75a5-2b3c-4c9a-b89d-f63023e4a6f1"
+"props" -> {HashMap@6532}  size = 5
+ key = "props"
+ value = {HashMap@6532}  size = 5
+  "index" -> {StringValue@6543} ""0""
+  "text" -> "Artificial Intelligence (AI) is a field of computer science\n\nIt focuses on creating intelligent agents capable of performing tasks that require human intelligence."
+  "id" -> {StringValue@6546} ""doc-ai""
+  "title" -> {StringValue@6548} ""AI Overview""
+  "url" -> {StringValue@6550} ""https://example.com/ai""
+     */
 
     private void bulk(List<String> ids, List<Embedding> embeddings, List<TextSegment> embedded) {
         Stream<List<Map<String, Object>>> rowsBatched = getRowsBatched(this, ids, embeddings, embedded);
@@ -376,9 +424,14 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
         try (var session = session()) {
             rowsBatched.forEach(rows -> {
                 String statement = String.format(
-                        ENTITIES_CREATION, this.sanitizedLabel, this.sanitizedIdProperty, PROPS, EMBEDDINGS_ROW_KEY);
+                        this.entityCreationQuery, this.sanitizedLabel, this.sanitizedIdProperty, PROPS, EMBEDDINGS_ROW_KEY);
+                        // ENTITIES_CREATION, 
 
-                Map<String, Object> params = Map.of("rows", rows, "embeddingProperty", this.embeddingProperty);
+                Map<String, Object> params = new HashMap<>();
+                params.put("rows", rows);
+                params.put("embeddingProperty", this.embeddingProperty);
+                params.putAll(additionalParams);
+//                Map.of("rows", rows, "embeddingProperty", this.embeddingProperty);
 
                 session.executeWrite(tx -> tx.run(statement, params).consume());
             });
@@ -486,6 +539,8 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
         private String fullTextQuery;
         private String fullTextRetrievalQuery;
         private boolean autoCreateFullText;
+        private String entityCreationQuery;
+        private Map<String, Object> additionalParams;
 
         /**
          * @param indexName the optional index name (default: "vector")
@@ -549,6 +604,15 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
          */
         public Builder retrievalQuery(String retrievalQuery) {
             this.retrievalQuery = retrievalQuery;
+            return this;
+        }
+
+        /**
+         * @param entityCreationQuery TODO
+         *                       
+         */
+        public Builder entityCreationQuery(String entityCreationQuery) {
+            this.entityCreationQuery = entityCreationQuery;
             return this;
         }
 
@@ -617,6 +681,14 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
         }
 
         /**
+         * @param additionalParams TODO
+         */
+        public Builder additionalParams(Map<String, Object> additionalParams) {
+            this.additionalParams = additionalParams;
+            return this;
+        }
+
+        /**
          * Creates an instance a {@link Driver}, starting from uri, user and password
          *
          * @param uri      the Bolt URI to a Neo4j instance
@@ -645,7 +717,9 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
                     fullTextIndexName,
                     fullTextQuery,
                     fullTextRetrievalQuery,
-                    autoCreateFullText);
+                    autoCreateFullText,
+                    entityCreationQuery,
+                    additionalParams);
         }
     }
 }

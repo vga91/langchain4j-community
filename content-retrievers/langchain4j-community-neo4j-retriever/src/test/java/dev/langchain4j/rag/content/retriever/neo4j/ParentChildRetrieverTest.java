@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static dev.langchain4j.rag.content.retriever.neo4j.Neo4jRetrieverBaseTest.NEO4J_VERSION;
+import static dev.langchain4j.rag.content.retriever.neo4j.ParentChildGraphRetriever2.DEFAULT_RETRIEVAL;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class ParentChildRetrieverTest {
@@ -97,13 +98,22 @@ public class ParentChildRetrieverTest {
 
 
     @Test
-    public void testParentChildRetriever_withDocumentByRegexSplitter() {
+    public void testParentChildRetriever_withDocumentByRegexSplitter1() {
         EmbeddingModel embeddingModel = new AllMiniLmL6V2QuantizedEmbeddingModel();
         String vectorIndex = "child_embedding_index";
         int embeddingDimensions = 384;
 
+
+        final Neo4jEmbeddingStore build = Neo4jEmbeddingStore.builder()
+                .driver(driver)
+                .retrievalQuery(DEFAULT_RETRIEVAL)
+                .label("Child")
+                .indexName("child_embedding_index")
+                .dimension(384)
+                .build();
+
         ParentChildGraphRetriever2 retriever = new ParentChildGraphRetriever2(
-                embeddingModel, driver, vectorIndex, embeddingDimensions
+                embeddingModel, driver/*, vectorIndex, embeddingDimensions*/,3, 0.5, null
         );
 
         // Parent splitter splits on paragraphs (double newlines)
@@ -128,7 +138,52 @@ public class ParentChildRetrieverTest {
         retriever.index(doc, parentSplitter, childSplitter);
 
         // Query and validate results
-        List<Content> results = retriever.retrieve("What is Machine Learning?", 3, 0.5);
+        List<Content> results = retriever.retrieve(Query.from("What is Machine Learning?"));
+
+        assertFalse(results.isEmpty(), "Should retrieve at least one parent document");
+
+        Content result = results.get(0);
+        System.out.println("Retrieved Text:\n" + result.textSegment().text());
+        System.out.println("Metadata: " + result.textSegment().metadata());
+
+        assertTrue(result.textSegment().text().toLowerCase().contains("machine learning"));
+        assertEquals("https://example.com/ai", result.textSegment().metadata().getString("source"));
+    }
+
+
+    @Test
+    public void testParentChildRetriever_withDocumentByRegexSplitter() {
+        EmbeddingModel embeddingModel = new AllMiniLmL6V2QuantizedEmbeddingModel();
+        String vectorIndex = "child_embedding_index";
+        int embeddingDimensions = 384;
+
+        ParentChildGraphRetriever2 retriever = new ParentChildGraphRetriever2(
+                embeddingModel, driver/*, vectorIndex, embeddingDimensions*/,1, 0.5, null
+        );
+
+        // Parent splitter splits on paragraphs (double newlines)
+        final String expectedQuery = "\\n\\n";
+        int maxSegmentSize = 250;
+        DocumentSplitter parentSplitter = new DocumentByRegexSplitter(expectedQuery, expectedQuery, maxSegmentSize, 0);
+
+        // Child splitter splits on periods (sentences)
+        final String expectedQuery1 = "\\. ";
+        DocumentSplitter childSplitter = new DocumentByRegexSplitter(expectedQuery1, expectedQuery, maxSegmentSize, 0);
+
+        Document doc = Document.from(
+                """
+                Artificial Intelligence (AI) is a field of computer science. It focuses on creating intelligent agents capable of performing tasks that require human intelligence.
+        
+                Machine Learning (ML) is a subset of AI. It uses data to learn patterns and make predictions. Deep Learning is a specialized form of ML based on neural networks.
+                """,
+                Metadata.from(Map.of("title", "AI Overview", "url", "https://example.com/ai", "id", "doc-ai"))
+        );
+
+        // Index the document into Neo4j as parent-child nodes
+        retriever.index(doc, parentSplitter, childSplitter);
+
+        // Query and validate results
+        List<Content> results = retriever.retrieve(Query.from("What is Machine Learning?"));
 
         assertFalse(results.isEmpty(), "Should retrieve at least one parent document");
 
@@ -151,7 +206,7 @@ public class ParentChildRetrieverTest {
         int embeddingDimensions = 384;
 
         ParentChildGraphRetriever2 retriever = new ParentChildGraphRetriever2(
-                embeddingModel, driver, vectorIndex, embeddingDimensions
+                embeddingModel, driver/*, vectorIndex, embeddingDimensions*/, 3, 0.5, null
         );
 
         int maxSegmentSize = 250;
@@ -174,7 +229,7 @@ public class ParentChildRetrieverTest {
 
         retriever.index(doc, parentSplitter, childSplitter);
 
-        List<Content> results = retriever.retrieve("What is Machine Learning?", 3, 0.5);
+        List<Content> results = retriever.retrieve(Query.from("What is Machine Learning?"));
 
         assertFalse(results.isEmpty(), "Should retrieve at least one parent document");
         assertTrue(results.get(0).textSegment().text().toLowerCase().contains("machine learning"));
