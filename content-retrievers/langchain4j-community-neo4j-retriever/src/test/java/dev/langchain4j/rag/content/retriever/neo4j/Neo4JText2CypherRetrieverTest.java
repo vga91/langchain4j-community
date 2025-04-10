@@ -15,7 +15,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-public class Neo4JText2CypherRetrieverTest extends Neo4jText2CypherRetrieverBaseTest {
+public class Neo4JText2CypherRetrieverTest extends Neo4jRetrieverBaseTest {
 
     private Neo4jText2CypherRetriever retriever;
 

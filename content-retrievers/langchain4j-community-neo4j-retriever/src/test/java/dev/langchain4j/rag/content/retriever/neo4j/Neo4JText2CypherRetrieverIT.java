@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 @EnabledIfEnvironmentVariable(named = "OPENAI_API_KEY", matches = ".+")
-class Neo4JText2CypherRetrieverIT extends Neo4jText2CypherRetrieverBaseTest {
+class Neo4JText2CypherRetrieverIT extends Neo4jRetrieverBaseTest {
 
     @Test
     void shouldRetrieveContentWhenQueryIsValidAndOpenAiChatModelIsUsed() {
