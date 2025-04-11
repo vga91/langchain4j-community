@@ -14,6 +14,7 @@ import dev.langchain4j.model.embedding.EmbeddingModel;
 //import dev.langchain4j.graph.Neo4jGraph;
 import dev.langchain4j.model.embedding.onnx.allminilml6v2q.AllMiniLmL6V2QuantizedEmbeddingModel;
 import dev.langchain4j.rag.content.Content;
+import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.rag.query.Query;
 import org.junit.jupiter.api.*;
 import org.neo4j.driver.AuthTokens;
@@ -26,9 +27,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import static dev.langchain4j.rag.content.retriever.neo4j.Neo4jRetrieverBaseTest.NEO4J_VERSION;
 import static dev.langchain4j.rag.content.retriever.neo4j.ParentChildGraphRetriever2.DEFAULT_RETRIEVAL;
+import static dev.langchain4j.rag.content.retriever.neo4j.ParentChildGraphRetriever2.PARENT_QUERY;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class ParentChildRetrieverTest {
@@ -150,7 +153,6 @@ public class ParentChildRetrieverTest {
         assertEquals("https://example.com/ai", result.textSegment().metadata().getString("source"));
     }
 
-
     @Test
     public void testParentChildRetriever_withDocumentByRegexSplitter() {
         EmbeddingModel embeddingModel = new AllMiniLmL6V2QuantizedEmbeddingModel();
@@ -195,6 +197,187 @@ public class ParentChildRetrieverTest {
         assertEquals("https://example.com/ai", result.textSegment().metadata().getString("source"));
     }
     
+    // TODO - creare esempio tipo così https://github.com/neo4j-examples/rag-demo/blob/main/rag_demo/vector_chain.py
+
+
+    // TODO
+    // TODO
+    // TODO
+    // TODO -- custom retriever
+    // TODO -- base retriever
+    // TODO -- the index method should be inside the constructor
+    // TODO
+    // TODO
+    @Test
+    void testIndexBaseRetriever() {
+        // Step 1: Document with metadata
+        Document parentDoc = Document.from(
+                """
+                Quantum mechanics studies how particles behave. It is a fundamental theory in physics.
+                
+                Gradient descent and backpropagation algorithms.
+                
+                Spaghetti carbonara and Italian dishes.
+                """,
+                Metadata.from(Map.of("title", "Quantum Mechanics", "source", "Wikipedia link"))
+        );
+
+        // Step 2: Splitter & embedder
+        int maxSegmentSize = 250;
+
+        // Parent splitter: splits on paragraphs (double newlines)
+//        final String expectedQuery = "\\n\\n";
+//        DocumentSplitter parentSplitter = new DocumentByRegexSplitter(expectedQuery, expectedQuery, maxSegmentSize, 0);
+
+
+        final Neo4jEmbeddingStore neo4jEmbeddingStore = Neo4jEmbeddingStore.builder()
+                .driver(driver)
+                .retrievalQuery(DEFAULT_RETRIEVAL)
+                .entityCreationQuery(PARENT_QUERY)
+                .label("Child")
+                .indexName("child_embedding_index")
+                .dimension(384)
+                .build();
+
+        // Child splitter: splits into sentences using OpenNLP
+        DocumentSplitter splitter = new DocumentBySentenceSplitter(maxSegmentSize, 0);
+
+//        // Index the document into Neo4j as parent-child nodes
+//        EmbeddingStoreContentRetriever retriever = EmbeddingStoreContentRetriever.builder()
+//                .embeddingModel(embeddingModel)
+//                .embeddingStore(neo4jEmbeddingStore)
+//                .maxResults(2)
+//                .minScore(0.5)
+//                .build();
+//               // embeddingModel, driver/*, vectorIndex, embeddingDimensions*/,2, 0.5, null
+//        //);
+
+        retriever.index(parentDoc, splitter, null);
+
+        // Query and validate results
+        List<Content> results = retriever.retrieve(Query.from("Tell me about quantum mechanics and cooking\""));
+
+        assertFalse(results.isEmpty(), "Should retrieve at least one parent document");
+
+        Content result = results.get(0);
+        System.out.println("Retrieved Text:\n" + result.textSegment().text());
+        System.out.println("Metadata: " + result.textSegment().metadata());
+
+        assertTrue(result.textSegment().text().toLowerCase().contains("quantum mechanics"));
+        assertEquals("Wikipedia link", result.textSegment().metadata().getString("source"));
+//        }
+    }
+    
+    
+    
+
+    @Test
+    void testIndexHypotheticalQuestions() {
+        // Step 1: Document with metadata
+        Document parentDoc = Document.from(
+                """
+                Quantum mechanics studies how particles behave. It is a fundamental theory in physics.
+                
+                Gradient descent and backpropagation algorithms.
+                
+                Spaghetti carbonara and Italian dishes.
+                """,
+                Metadata.from(Map.of("title", "Quantum Mechanics", "source", "Wikipedia link"))
+        );
+        String parentId = UUID.randomUUID().toString();
+
+        // Step 2: Splitter & embedder
+        int maxSegmentSize = 250;
+
+        // Parent splitter: splits on paragraphs (double newlines)
+//        final String expectedQuery = "\\n\\n";
+//        DocumentSplitter parentSplitter = new DocumentByRegexSplitter(expectedQuery, expectedQuery, maxSegmentSize, 0);
+
+        // Child splitter: splits into sentences using OpenNLP
+        DocumentSplitter splitter = new DocumentBySentenceSplitter(maxSegmentSize, 0);
+
+        // Index the document into Neo4j as parent-child nodes
+        HypotheticalQuestionRetriever retriever = new HypotheticalQuestionRetriever(
+                embeddingModel, driver/*, vectorIndex, embeddingDimensions*/,2, 0.5, null
+        );
+
+        retriever.index(parentDoc, splitter, null);
+
+        // Query and validate results
+        List<Content> results = retriever.retrieve(Query.from("Tell me about quantum mechanics and cooking\""));
+
+        assertFalse(results.isEmpty(), "Should retrieve at least one parent document");
+
+        Content result = results.get(0);
+        System.out.println("Retrieved Text:\n" + result.textSegment().text());
+        System.out.println("Metadata: " + result.textSegment().metadata());
+
+        assertTrue(result.textSegment().text().toLowerCase().contains("quantum mechanics"));
+        assertEquals("Wikipedia link", result.textSegment().metadata().getString("source"));
+
+//        // Step 4: Assertions
+//        try (Session session = driver.session()) {
+//            Record parent = session.run("MATCH (p:Parent {id: $id}) RETURN p.title AS title, p.source AS source",
+//                    Map.of("id", parentId)).single();
+//            assertEquals("Quantum Mechanics", parent.get("title").asString());
+//            assertEquals("Encyclopedia", parent.get("source").asString());
+//
+//            List<Record> questions = session.run("""
+//                MATCH (p:Parent {id: $id})-[:HAS_QUESTION]->(q:Question)
+//                RETURN q.text AS text
+//                """, Map.of("id", parentId)).list();
+//
+//            assertEquals(2, questions.size());
+//            List<String> texts = questions.stream().map(r -> r.get("text").asString()).toList();
+//            assertTrue(texts.stream().anyMatch(t -> t.contains("Quantum mechanics")));
+//            assertTrue(texts.stream().anyMatch(t -> t.contains("fundamental theory")));
+//        }
+    }
+
+//    @Test
+//    public void testHypoteticalRetriever_withDocumentByRegexSplitter() {
+//        EmbeddingModel embeddingModel = new AllMiniLmL6V2QuantizedEmbeddingModel();
+//        String vectorIndex = "child_embedding_index";
+//        int embeddingDimensions = 384;
+//
+//        HypotheticalQuestionRetriever retriever = new HypotheticalQuestionRetriever(
+//                embeddingModel, driver/*, vectorIndex, embeddingDimensions*/,1, 0.5, null
+//        );
+//
+//        // Parent splitter splits on paragraphs (double newlines)
+//        final String expectedQuery = "\\n\\n";
+//        int maxSegmentSize = 250;
+//        DocumentSplitter parentSplitter = new DocumentByRegexSplitter(expectedQuery, expectedQuery, maxSegmentSize, 0);
+//
+//        // Child splitter splits on periods (sentences)
+//        final String expectedQuery1 = "\\. ";
+//        DocumentSplitter childSplitter = new DocumentByRegexSplitter(expectedQuery1, expectedQuery, maxSegmentSize, 0);
+//
+//        Document doc = Document.from(
+//                """
+//                Artificial Intelligence (AI) is a field of computer science. It focuses on creating intelligent agents capable of performing tasks that require human intelligence.
+//        
+//                Machine Learning (ML) is a subset of AI. It uses data to learn patterns and make predictions. Deep Learning is a specialized form of ML based on neural networks.
+//                """,
+//                Metadata.from(Map.of("title", "AI Overview", "url", "https://example.com/ai", "id", "doc-ai"))
+//        );
+//
+//        // Index the document into Neo4j as parent-child nodes
+//        retriever.index(doc, parentSplitter, childSplitter);
+//
+//        // Query and validate results
+//        List<Content> results = retriever.retrieve(Query.from("What is Machine Learning?"));
+//
+//        assertFalse(results.isEmpty(), "Should retrieve at least one parent document");
+//
+//        Content result = results.get(0);
+//        System.out.println("Retrieved Text:\n" + result.textSegment().text());
+//        System.out.println("Metadata: " + result.textSegment().metadata());
+//
+//        assertTrue(result.textSegment().text().toLowerCase().contains("machine learning"));
+//        assertEquals("https://example.com/ai", result.textSegment().metadata().getString("source"));
+//    }
+//    
     
 //import dev.langchain4j.data.document.splitter.DocumentBySentenceSplitter;
 //import dev.langchain4j.data.document.splitter.DocumentSplitter;
@@ -238,28 +421,29 @@ public class ParentChildRetrieverTest {
 
 
 
-    static void seedTestData() {
-        try (var session = driver.session()) {
-            session.run("MATCH (n) DETACH DELETE n");
+//    static void seedTestData() {
+//        try (var session = driver.session()) {
+//            session.run("MATCH (n) DETACH DELETE n");
+//
+//            // Create parent and child
+//            session.run("""
+//                CREATE (parent:Document {id: 'parent-1', text: 'This is the parent doc.', source: 'test'})
+//                CREATE (child:Chunk {id: 'child-1', text: 'This is a detailed chunk about embeddings.', chunk: 1})
+//                CREATE (parent)-[:HAS_CHILD]->(child)
+//            """);
+//
+//            // Embed and store child embedding
+//            Embedding embedding = embeddingModel.embed("This is a detailed chunk about embeddings.").content();
+//            TextSegment segment = new TextSegment("This is a detailed chunk about embeddings.",
+//                    Metadata.from(Map.of("id", "child-1"))
+//            );
+//
+//            embeddingStore.add(embedding, segment);
+//        }
+//    }
 
-            // Create parent and child
-            session.run("""
-                CREATE (parent:Document {id: 'parent-1', text: 'This is the parent doc.', source: 'test'})
-                CREATE (child:Chunk {id: 'child-1', text: 'This is a detailed chunk about embeddings.', chunk: 1})
-                CREATE (parent)-[:HAS_CHILD]->(child)
-            """);
 
-            // Embed and store child embedding
-            Embedding embedding = embeddingModel.embed("This is a detailed chunk about embeddings.").content();
-            TextSegment segment = new TextSegment("This is a detailed chunk about embeddings.",
-                    Metadata.from(Map.of("id", "child-1"))
-            );
-
-            embeddingStore.add(embedding, segment);
-        }
-    }
-
-
+    // TODO - esempio senza metodo index, partendo direttamente da un dataset e facendo il retrieve
     static void seedTestData1() {
         try (var session = driver.session()) {
             session.run("MATCH (n) DETACH DELETE n");
@@ -331,24 +515,24 @@ public class ParentChildRetrieverTest {
     
     
 
-    @Test
-    void retrievesParentGivenQueryAboutEmbeddings() {
-//        final ParentChildRetriever retriever = new ParentChildRetriever(
-//                embeddingModel,
-//                embeddingStore,
-//                graph,
-//                5,
-//                0.0
-//        );
-
-        seedTestData();
-        List<Content> result = retriever.retrieve(new Query("Tell me about embeddings"));
-
-        assertFalse(result.isEmpty());
-        Content content = result.get(0);
-        assertTrue(content.textSegment().text().contains("parent doc"));
-        assertEquals("test", content.metadata().get("source"));
-    }
+//    @Test
+//    void retrievesParentGivenQueryAboutEmbeddings() {
+////        final ParentChildRetriever retriever = new ParentChildRetriever(
+////                embeddingModel,
+////                embeddingStore,
+////                graph,
+////                5,
+////                0.0
+////        );
+//
+//        seedTestData();
+//        List<Content> result = retriever.retrieve(new Query("Tell me about embeddings"));
+//
+//        assertFalse(result.isEmpty());
+//        Content content = result.get(0);
+//        assertTrue(content.textSegment().text().contains("parent doc"));
+//        assertEquals("test", content.metadata().get("source"));
+//    }
 
     @Test
     public void testParentChildRetrievalWithMultipleRelationships() {
