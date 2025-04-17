@@ -10,10 +10,18 @@ import dev.langchain4j.rag.query.Query;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.neo4j.driver.Session;
 
 @EnabledIfEnvironmentVariable(named = "OPENAI_API_KEY", matches = ".+")
 class Neo4JText2CypherRetrieverIT extends Neo4jRetrieverBaseTest {
 
+    @Override
+    public void initDb() {
+        try (Session session = driver.session()) {
+            session.run("CREATE (book:Book {title: 'Dune'})<-[:WROTE]-(author:Person {name: 'Frank Herbert'})");
+        }
+    }
+    
     @Test
     void shouldRetrieveContentWhenQueryIsValidAndOpenAiChatModelIsUsed() {
 

@@ -17,9 +17,9 @@ public class ParentChildGraphRetriever2 extends Neo4jEmbeddingRetriever {
     public final static String DEFAULT_RETRIEVAL = """
             MATCH (node)<-[:HAS_CHILD]-(parent)
             WITH parent, collect(node.text) AS chunks, max(score) AS score
-            RETURN parent.title + reduce(r = "", c in chunks | r + "\\n\\n" + c) AS text,
+            RETURN parent.text + reduce(r = "", c in chunks | r + "\\n\\n" + c) AS text,
                    score,
-                   {source: parent.url} AS metadata
+                   properties(parent) AS metadata
             ORDER BY score DESC
             LIMIT $maxResults""";
 
@@ -33,15 +33,12 @@ public class ParentChildGraphRetriever2 extends Neo4jEmbeddingRetriever {
                 WITH row, u
                 CALL db.create.setNodeVectorProperty(u, $embeddingProperty, row.%4$s)
                 RETURN count(*)""";
-    
 
-    // TODO https://chatgpt.com/c/67ff6a72-5fe0-800c-9c12-c50ec8d5ee35
-    // todo --> creare un fromLLM
     
     public ParentChildGraphRetriever2(EmbeddingModel embeddingModel, Driver driver,
                                       int maxResults,
                                       double minScore, Neo4jEmbeddingStore embeddingStore) {
-        super(embeddingModel, driver, maxResults, minScore, "CREATE (:Parent $metadata)", Map.of(), embeddingStore);
+        super(embeddingModel, driver, maxResults, minScore, "CREATE (:Parent $metadata)", Map.of(), embeddingStore,  null, null, null, null, null);
 //        this.embeddingModel = embeddingModel;
 //        this.driver = driver;
 //        this.maxResults = maxResults;

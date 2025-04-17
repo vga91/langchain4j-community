@@ -1,6 +1,7 @@
 package dev.langchain4j.rag.content.retriever.neo4j;
 
 import dev.langchain4j.community.store.embedding.neo4j.Neo4jEmbeddingStore;
+import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import org.neo4j.driver.Driver;
 
@@ -46,9 +47,23 @@ public class HypotheticalQuestionRetriever extends Neo4jEmbeddingRetriever {
                 WITH row, u
                 CALL db.create.setNodeVectorProperty(u, $embeddingProperty, row.%4$s)
                 RETURN count(*)""";*/
-    
-    public HypotheticalQuestionRetriever(final EmbeddingModel embeddingModel, final Driver driver, final int maxResults, final double minScore, final Neo4jEmbeddingStore embeddingStore) {
-        super(embeddingModel, driver, maxResults, minScore, "CREATE (:Parent $metadata)", Map.of(), embeddingStore);
+
+    public final static String SYSTEM_PROMPT = """
+            You are generating hypothetical questions based on the information found in the text.
+            Make sure to provide full context in the generated questions.
+            """;
+
+    public final static String USER_PROMPT = """
+            Use the given format to generate hypothetical questions from the following input:
+            {{input}}
+            
+            Hypothetical questions:
+            """;
+
+
+
+    public HypotheticalQuestionRetriever(final EmbeddingModel embeddingModel, final Driver driver, final int maxResults, final double minScore, final Neo4jEmbeddingStore embeddingStore, final ChatLanguageModel chatModel, final ChatLanguageModel answerModel, final String promptAnswer) {
+        super(embeddingModel, driver, maxResults, minScore, "CREATE (:Parent $metadata)", Map.of(), embeddingStore, chatModel, SYSTEM_PROMPT, USER_PROMPT, answerModel, promptAnswer);
     }
 
     @Override

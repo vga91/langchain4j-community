@@ -15,8 +15,8 @@ public class Neo4jRetrieverBaseTest {
 
     protected static final String NEO4J_VERSION = System.getProperty("neo4jVersion", "5.26");
 
-    protected Driver driver;
-    protected Neo4jGraph graph;
+    protected static Driver driver;
+    protected static Neo4jGraph graph;
 
     @Container
     protected static final Neo4jContainer<?> neo4jContainer = new Neo4jContainer<>("neo4j:" + NEO4J_VERSION)
@@ -26,31 +26,31 @@ public class Neo4jRetrieverBaseTest {
     @BeforeAll
     static void beforeAll() {
         neo4jContainer.start();
+
+        driver = GraphDatabase.driver(neo4jContainer.getBoltUrl(), AuthTokens.none());
+        graph = Neo4jGraph.builder().driver(driver).build();
     }
 
     @AfterAll
     static void afterAll() {
+        graph.close();
+        driver.close();
+        
         neo4jContainer.stop();
     }
 
     @BeforeEach
     void beforeEach() {
-
-        driver = GraphDatabase.driver(neo4jContainer.getBoltUrl(), AuthTokens.none());
-
-        try (Session session = driver.session()) {
-            session.run("CREATE (book:Book {title: 'Dune'})<-[:WROTE]-(author:Person {name: 'Frank Herbert'})");
-        }
-
-        graph = Neo4jGraph.builder().driver(driver).build();
+        initDb();
     }
+
+    public void initDb() {}
 
     @AfterEach
     void afterEach() {
         try (Session session = driver.session()) {
             session.run("MATCH (n) DETACH DELETE n");
         }
-        graph.close();
-        driver.close();
+
     }
 }

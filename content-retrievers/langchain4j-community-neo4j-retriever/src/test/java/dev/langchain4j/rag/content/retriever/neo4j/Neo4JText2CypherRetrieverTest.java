@@ -13,12 +13,21 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.neo4j.driver.Session;
 
 @ExtendWith(MockitoExtension.class)
 public class Neo4JText2CypherRetrieverTest extends Neo4jRetrieverBaseTest {
 
     private Neo4jText2CypherRetriever retriever;
-
+    
+    @Override
+    public void initDb() {
+        try (Session session = driver.session()) {
+            session.run("CREATE (book:Book {title: 'Dune'})<-[:WROTE]-(author:Person {name: 'Frank Herbert'})");
+        }
+    }
+    
+    // TODO - mock tests in retriever
     @Mock
     private ChatLanguageModel chatLanguageModel;
 

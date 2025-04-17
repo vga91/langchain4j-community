@@ -20,24 +20,16 @@ import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.query.Query;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
-import org.neo4j.driver.AuthTokens;
-import org.neo4j.driver.Driver;
-import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.Session;
 import org.neo4j.driver.Value;
 import org.neo4j.driver.Values;
-import org.testcontainers.containers.Neo4jContainer;
 
-import java.time.Duration;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import static dev.langchain4j.model.openai.OpenAiChatModelName.GPT_4_O_MINI;
 import static dev.langchain4j.rag.content.retriever.neo4j.Neo4jEmbeddingRetriever.DEFAULT_PROMPT_ANSWER;
-import static dev.langchain4j.rag.content.retriever.neo4j.Neo4jRetrieverBaseTest.NEO4J_VERSION;
 import static dev.langchain4j.rag.content.retriever.neo4j.ParentChildGraphRetriever2.DEFAULT_RETRIEVAL;
 import static dev.langchain4j.rag.content.retriever.neo4j.ParentChildGraphRetriever2.PARENT_QUERY;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 // OPENAI_API_KEY=demo;OPENAI_BASE_URL=http://langchain4j.dev/demo/openai/v1
 @EnabledIfEnvironmentVariable(named = "OPENAI_API_KEY", matches = ".+")
-public class ParentChildRetrieverTest extends Neo4jRetrieverBaseTest {
+public class ParentChildRetrieverTest2 extends Neo4jRetrieverBaseTest {
 
     ChatLanguageModel chatModel = OpenAiChatModel.builder()
             .baseUrl(System.getenv("OPENAI_BASE_URL"))
@@ -688,8 +680,6 @@ public class ParentChildRetrieverTest extends Neo4jRetrieverBaseTest {
 //        assertEquals("test", content.metadata().get("source"));
 //    }
 
-    
-    // TODO - change with correctParentChildRetriever and check
     @Test
     public void testParentChildRetrievalWithMultipleRelationships() {
         // Step 1: Document Chunking
