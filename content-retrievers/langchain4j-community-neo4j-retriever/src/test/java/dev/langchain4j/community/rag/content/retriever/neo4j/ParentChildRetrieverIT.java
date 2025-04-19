@@ -1,4 +1,4 @@
-package dev.langchain4j.rag.content.retriever.neo4j;
+package dev.langchain4j.community.rag.content.retriever.neo4j;
 
 //import dev.langchain4j.community.model.xinference.XinferenceChatModel;
 import dev.langchain4j.community.store.embedding.neo4j.Neo4jEmbeddingStore;
@@ -20,7 +20,6 @@ import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.query.Query;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
-import org.neo4j.driver.Session;
 import org.neo4j.driver.Value;
 import org.neo4j.driver.Values;
 
@@ -29,15 +28,15 @@ import java.util.Map;
 import java.util.UUID;
 
 import static dev.langchain4j.model.openai.OpenAiChatModelName.GPT_4_O_MINI;
-import static dev.langchain4j.rag.content.retriever.neo4j.Neo4jEmbeddingRetriever.DEFAULT_PROMPT_ANSWER;
-import static dev.langchain4j.rag.content.retriever.neo4j.ParentChildGraphRetriever2.DEFAULT_RETRIEVAL;
-import static dev.langchain4j.rag.content.retriever.neo4j.ParentChildGraphRetriever2.PARENT_QUERY;
+import static dev.langchain4j.community.rag.content.retriever.neo4j.Neo4jEmbeddingRetriever.DEFAULT_PROMPT_ANSWER;
+import static dev.langchain4j.community.rag.content.retriever.neo4j.ParentChildGraphRetriever.DEFAULT_RETRIEVAL;
+import static dev.langchain4j.community.rag.content.retriever.neo4j.ParentChildGraphRetriever.PARENT_QUERY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
 // OPENAI_API_KEY=demo;OPENAI_BASE_URL=http://langchain4j.dev/demo/openai/v1
 @EnabledIfEnvironmentVariable(named = "OPENAI_API_KEY", matches = ".+")
-public class ParentChildRetrieverTest2 extends Neo4jRetrieverBaseTest {
+public class ParentChildRetrieverIT extends Neo4jEmbeddingRetrieverBaseTest {
 
     ChatLanguageModel chatModel = OpenAiChatModel.builder()
             .baseUrl(System.getenv("OPENAI_BASE_URL"))
@@ -49,11 +48,11 @@ public class ParentChildRetrieverTest2 extends Neo4jRetrieverBaseTest {
             .build();
     
 //    private static Neo4jContainer<?> neo4jContainer;
-    private static Neo4jEmbeddingStore embeddingStore;
+//    private static Neo4jEmbeddingStore embeddingStore;
 //    private static Neo4jGraph graph;
-    private static EmbeddingModel embeddingModel;
+//    private static EmbeddingModel embeddingModel;
 //    private static Driver driver;
-    private static ParentChildRetriever retriever;
+//    private static ParentChildRetriever retriever;
     
     
     // TODO - test with Neo4jEmbeddingRetriever
@@ -62,47 +61,47 @@ public class ParentChildRetrieverTest2 extends Neo4jRetrieverBaseTest {
 
 //    private static EmbeddingModel embeddingModel = new AllMiniLmL6V2QuantizedEmbeddingModel();
 
-    @BeforeAll
-    public static void setUp() {
-        // todo - NEEDED?
-        Neo4jRetrieverBaseTest.beforeAll();
-        
-        
-        // Start Neo4j Testcontainer
-//        neo4jContainer = new Neo4jContainer<>("neo4j:" + NEO4J_VERSION)
-//                .withPlugins("apoc")
-//                .withoutAuthentication(); // Disable authentication for testing
-//        //.withAdminPassword("test1234"); /
-//        neo4jContainer.start();
-
-//        driver = GraphDatabase.driver(neo4jContainer.getBoltUrl(), AuthTokens.none());
-
-        // Initialize Neo4jEmbeddingStore
-        embeddingStore = Neo4jEmbeddingStore.builder()
-                .driver(driver)
-                .databaseName("neo4j")
-                .dimension(384)
-                .build();
-
-//        // Initialize Neo4jGraph
-//        graph = Neo4jGraph.builder()
+//    @BeforeAll
+//    public static void setUp() {
+//        // todo - NEEDED?
+//        Neo4jRetrieverBaseTest.beforeAll();
+//        
+//        
+//        // Start Neo4j Testcontainer
+////        neo4jContainer = new Neo4jContainer<>("neo4j:" + NEO4J_VERSION)
+////                .withPlugins("apoc")
+////                .withoutAuthentication(); // Disable authentication for testing
+////        //.withAdminPassword("test1234"); /
+////        neo4jContainer.start();
+//
+////        driver = GraphDatabase.driver(neo4jContainer.getBoltUrl(), AuthTokens.none());
+//
+//        // Initialize Neo4jEmbeddingStore
+//        embeddingStore = Neo4jEmbeddingStore.builder()
 //                .driver(driver)
+//                .databaseName("neo4j")
+//                .dimension(384)
 //                .build();
-
-        // Initialize Embedding Model
-        embeddingModel = new AllMiniLmL6V2QuantizedEmbeddingModel();
-
-//        retriever = new ParentChildRetriever(
-//                embeddingModel,
-//                embeddingStore,
-//                graph,
-//                5,
-//                0.6
-//        );
-        
-        // seedTestData();
-    }
-    
+//
+////        // Initialize Neo4jGraph
+////        graph = Neo4jGraph.builder()
+////                .driver(driver)
+////                .build();
+//
+//        // Initialize Embedding Model
+//        embeddingModel = new AllMiniLmL6V2QuantizedEmbeddingModel();
+//
+////        retriever = new ParentChildRetriever(
+////                embeddingModel,
+////                embeddingStore,
+////                graph,
+////                5,
+////                0.6
+////        );
+//        
+//        // seedTestData();
+//    }
+//    
     // TODO --> https://medium.com/data-science/langchains-parent-document-retriever-revisited-1fca8791f5a0
     
 
@@ -168,7 +167,7 @@ public class ParentChildRetrieverTest2 extends Neo4jRetrieverBaseTest {
                 .dimension(384)
                 .build();
 
-        ParentChildGraphRetriever2 retriever = new ParentChildGraphRetriever2(
+        ParentChildGraphRetriever retriever = new ParentChildGraphRetriever(
                 embeddingModel, driver/*, vectorIndex, embeddingDimensions*/,3, 0.5, null
         );
 
@@ -205,154 +204,6 @@ public class ParentChildRetrieverTest2 extends Neo4jRetrieverBaseTest {
         assertTrue(result.textSegment().text().toLowerCase().contains("machine learning"));
         assertEquals("Wikipedia link", result.textSegment().metadata().getString("url"));
     }
-
-    @Test
-    public void testBasicRetriever() {
-        BasicRetriever retriever = new BasicRetriever(embeddingModel, driver, 1, 0.5, null, Map.of(), null);
-
-        Document parentDoc = Document.from(
-                """
-                Quantum mechanics studies how particles behave. It is a fundamental theory in physics.
-                
-                Gradient descent and backpropagation algorithms.
-                
-                Spaghetti carbonara and Italian dishes.
-                """,
-                Metadata.from(Map.of("title", "Quantum Mechanics", "source", "Wikipedia link"))
-        );
-        
-        // Child splitter: splits into sentences using OpenNLP
-        DocumentSplitter splitter = new DocumentBySentenceSplitter(250, 0);
-
-        retriever.index(parentDoc, splitter, null);
-        final List<Content> retrieve = retriever.retrieve(Query.from("fundamental theory"));
-
-        // Query and validate results
-        List<Content> results = retriever.retrieve(Query.from("What is Machine Learning?"));
-        assertFalse(results.isEmpty(), "Should retrieve at least one parent document");
-
-        Content result = results.get(0);
-
-        assertTrue(result.textSegment().text().toLowerCase().contains("fundamental theory"));
-        assertEquals("Wikipedia link", result.textSegment().metadata().getString("source"));
-    }
-
-    @Test
-    public void testParentChildRetriever_withDocumentByRegexSplitter() {
-        EmbeddingModel embeddingModel = new AllMiniLmL6V2QuantizedEmbeddingModel();
-        String vectorIndex = "child_embedding_index";
-        int embeddingDimensions = 384;
-
-        ParentChildGraphRetriever2 retriever = new ParentChildGraphRetriever2(
-                embeddingModel, driver/*, vectorIndex, embeddingDimensions*/,1, 0.5, null
-        );
-
-        // Parent splitter splits on paragraphs (double newlines)
-        final String expectedQuery = "\\n\\n";
-        int maxSegmentSize = 250;
-        DocumentSplitter parentSplitter = new DocumentByRegexSplitter(expectedQuery, expectedQuery, maxSegmentSize, 0);
-
-        // Child splitter splits on periods (sentences)
-        final String expectedQuery1 = "\\. ";
-        DocumentSplitter childSplitter = new DocumentByRegexSplitter(expectedQuery1, expectedQuery, maxSegmentSize, 0);
-
-        Document doc = Document.from(
-                """
-                Artificial Intelligence (AI) is a field of computer science. It focuses on creating intelligent agents capable of performing tasks that require human intelligence.
-        
-                Machine Learning (ML) is a subset of AI. It uses data to learn patterns and make predictions. Deep Learning is a specialized form of ML based on neural networks.
-                """,
-                Metadata.from(Map.of("title", "AI Overview", "url", "https://example.com/ai", "id", "doc-ai"))
-        );
-
-        // Index the document into Neo4j as parent-child nodes
-        retriever.index(doc, parentSplitter, childSplitter);
-
-        // Query and validate results
-        List<Content> results = retriever.retrieve(Query.from("What is Machine Learning?"));
-
-        assertFalse(results.isEmpty(), "Should retrieve at least one parent document");
-
-        Content result = results.get(0);
-        System.out.println("Retrieved Text:\n" + result.textSegment().text());
-        System.out.println("Metadata: " + result.textSegment().metadata());
-
-        assertTrue(result.textSegment().text().toLowerCase().contains("machine learning"));
-        assertEquals("https://example.com/ai", result.textSegment().metadata().getString("source"));
-    }
-    
-    // TODO - creare esempio tipo così https://github.com/neo4j-examples/rag-demo/blob/main/rag_demo/vector_chain.py
-
-
-    // TODO
-    // TODO
-    // TODO
-    // TODO -- custom retriever
-    // TODO -- base retriever
-    // TODO -- the index method should be inside the constructor
-    // TODO
-    // TODO
-//    @Test
-//    void testIndexBaseRetriever() {
-//        // Step 1: Document with metadata
-//        Document parentDoc = Document.from(
-//                """
-//                Quantum mechanics studies how particles behave. It is a fundamental theory in physics.
-//                
-//                Gradient descent and backpropagation algorithms.
-//                
-//                Spaghetti carbonara and Italian dishes.
-//                """,
-//                Metadata.from(Map.of("title", "Quantum Mechanics", "source", "Wikipedia link"))
-//        );
-//
-//        // Step 2: Splitter & embedder
-//        int maxSegmentSize = 250;
-//
-//        // Parent splitter: splits on paragraphs (double newlines)
-////        final String expectedQuery = "\\n\\n";
-////        DocumentSplitter parentSplitter = new DocumentByRegexSplitter(expectedQuery, expectedQuery, maxSegmentSize, 0);
-//
-//
-//        final Neo4jEmbeddingStore neo4jEmbeddingStore = Neo4jEmbeddingStore.builder()
-//                .driver(driver)
-//                .retrievalQuery(DEFAULT_RETRIEVAL)
-//                .entityCreationQuery(PARENT_QUERY)
-//                .label("Child")
-//                .indexName("child_embedding_index")
-//                .dimension(384)
-//                .build();
-//
-//        // Child splitter: splits into sentences using OpenNLP
-//        DocumentSplitter splitter = new DocumentBySentenceSplitter(maxSegmentSize, 0);
-//
-////        // Index the document into Neo4j as parent-child nodes
-////        EmbeddingStoreContentRetriever retriever = EmbeddingStoreContentRetriever.builder()
-////                .embeddingModel(embeddingModel)
-////                .embeddingStore(neo4jEmbeddingStore)
-////                .maxResults(2)
-////                .minScore(0.5)
-////                .build();
-////               // embeddingModel, driver/*, vectorIndex, embeddingDimensions*/,2, 0.5, null
-////        //);
-//
-//        retriever.index(parentDoc, splitter, null);
-//
-//        // Query and validate results
-//        List<Content> results = retriever.retrieve(Query.from("Tell me about quantum mechanics and cooking\""));
-//
-//        assertFalse(results.isEmpty(), "Should retrieve at least one parent document");
-//
-//        Content result = results.get(0);
-//        System.out.println("Retrieved Text:\n" + result.textSegment().text());
-//        System.out.println("Metadata: " + result.textSegment().metadata());
-//
-//        assertTrue(result.textSegment().text().toLowerCase().contains("quantum mechanics"));
-//        assertEquals("Wikipedia link", result.textSegment().metadata().getString("source"));
-////        }
-//    }
-
-
 
     @Test
     void testIndexHypotheticalQuestionsWithPromptAnswer() {
@@ -530,7 +381,7 @@ public class ParentChildRetrieverTest2 extends Neo4jRetrieverBaseTest {
         String vectorIndex = "child_embedding_index_sentence";
         int embeddingDimensions = 384;
 
-        ParentChildGraphRetriever2 retriever = new ParentChildGraphRetriever2(
+        ParentChildGraphRetriever retriever = new ParentChildGraphRetriever(
                 embeddingModel, driver/*, vectorIndex, embeddingDimensions*/, 3, 0.5, null
         );
 
@@ -617,7 +468,7 @@ public class ParentChildRetrieverTest2 extends Neo4jRetrieverBaseTest {
 
         seedTestParentChildData();
         
-        final ParentChildGraphRetriever2 parentChildGraphRetriever2 = new ParentChildGraphRetriever2(
+        final ParentChildGraphRetriever parentChildGraphRetriever2 = new ParentChildGraphRetriever(
                 embeddingModel,
                 driver,
                 5,
@@ -680,7 +531,9 @@ public class ParentChildRetrieverTest2 extends Neo4jRetrieverBaseTest {
 //        assertEquals("test", content.metadata().get("source"));
 //    }
 
-    @Test
+    
+    // TODO - test with before created graph
+/*    @Test
     public void testParentChildRetrievalWithMultipleRelationships() {
         // Step 1: Document Chunking
         String parentText1 = "Artificial Intelligence is a branch of computer science.";
@@ -721,8 +574,12 @@ public class ParentChildRetrieverTest2 extends Neo4jRetrieverBaseTest {
             System.out.println("content = " + content);
         }
 //            assertTrue(content() >= threshold, "Similarity score is below threshold");
-    }
+    }*/
+    // TODO - end test with before created graph
 
+    
+    
+    
 /*    @Test
     public void testParentChildRetrievalWithNoMatches() {
         seedTestData();

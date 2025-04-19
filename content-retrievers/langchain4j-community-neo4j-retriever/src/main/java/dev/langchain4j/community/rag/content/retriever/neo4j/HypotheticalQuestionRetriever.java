@@ -1,4 +1,4 @@
-package dev.langchain4j.rag.content.retriever.neo4j;
+package dev.langchain4j.community.rag.content.retriever.neo4j;
 
 import dev.langchain4j.community.store.embedding.neo4j.Neo4jEmbeddingStore;
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -9,21 +9,13 @@ import java.util.Map;
 
 public class HypotheticalQuestionRetriever extends Neo4jEmbeddingRetriever {
 
-    // TODO - metadata
     public final static String DEFAULT_RETRIEVAL = """
             MATCH (node)<-[:HAS_QUESTION]-(parent)
             WITH parent, max(score) AS score, node // deduplicate parents
             RETURN parent.text AS text, score, properties(node) AS metadata
              ORDER BY score DESC
             LIMIT $maxResults""";
-//            
-//            MATCH (node)<-[:HAS_CHILD]-(parent)
-//            WITH parent, collect(node.text) AS chunks, max(score) AS score
-//            RETURN parent.title + reduce(r = "", c in chunks | r + "\\n\\n" + c) AS text,
-//                   score,
-//                   {source: parent.url} AS metadata
-//            ORDER BY score DESC
-//            LIMIT $maxResults""";
+
     public static final String PARENT_QUERY =
             """
                         UNWIND $rows AS question
@@ -39,14 +31,6 @@ public class HypotheticalQuestionRetriever extends Neo4jEmbeddingRetriever {
                         // YIELD node
                         RETURN count(*)
                     """;
-/*            """
-                UNWIND $rows AS row
-                MATCH (p:Parent {id: $parentId})
-                CREATE (p)-[:HAS_CHILD]->(u:%1$s {%2$s: row.%2$s})
-                SET u += row.%3$s
-                WITH row, u
-                CALL db.create.setNodeVectorProperty(u, $embeddingProperty, row.%4$s)
-                RETURN count(*)""";*/
 
     public final static String SYSTEM_PROMPT = """
             You are generating hypothetical questions based on the information found in the text.
@@ -60,10 +44,8 @@ public class HypotheticalQuestionRetriever extends Neo4jEmbeddingRetriever {
             Hypothetical questions:
             """;
 
-
-
     public HypotheticalQuestionRetriever(final EmbeddingModel embeddingModel, final Driver driver, final int maxResults, final double minScore, final Neo4jEmbeddingStore embeddingStore, final ChatLanguageModel chatModel, final ChatLanguageModel answerModel, final String promptAnswer) {
-        super(embeddingModel, driver, maxResults, minScore, "CREATE (:Parent $metadata)", Map.of(), embeddingStore, chatModel, SYSTEM_PROMPT, USER_PROMPT, answerModel, promptAnswer);
+        super(embeddingModel, driver, maxResults, minScore, "CREATE (:Parent $metadata)", Map.of(), embeddingStore, chatModel, SYSTEM_PROMPT, USER_PROMPT, answerModel, promptAnswer, null);
     }
 
     @Override
@@ -76,5 +58,20 @@ public class HypotheticalQuestionRetriever extends Neo4jEmbeddingRetriever {
                 .indexName("child_embedding_index")
                 .dimension(384)
                 .build();
+    }
+
+    public static Builder builder() {
+        return new Builder(HypotheticalQuestionRetriever.class);
+    }
+
+    public static class Builder extends Neo4jEmbeddingRetriever.Builder<Builder, HypotheticalQuestionRetriever> {
+        public Builder(final Class clazz) {
+            super(clazz);
+        }
+
+        @Override
+        public HypotheticalQuestionRetriever build() {
+            return super.build();
+        }
     }
 }

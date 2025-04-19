@@ -1,4 +1,4 @@
-package dev.langchain4j.rag.content.retriever.neo4j;
+package dev.langchain4j.community.rag.content.retriever.neo4j;
 
 import dev.langchain4j.community.store.embedding.neo4j.Neo4jEmbeddingStore;
 import dev.langchain4j.data.document.Document;
@@ -21,59 +21,27 @@ import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Session;
 
+import java.lang.reflect.Constructor;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.function.Function;
 
 import static dev.langchain4j.internal.Utils.getOrDefault;
 import static dev.langchain4j.internal.Utils.randomUUID;
 import static dev.langchain4j.internal.ValidationUtils.ensureNotNull;
 
-/*
-TODO: fare qualcosa di simile a questo... MAGARI SOLO UN TEST?
-# flake8: noqa
-from langchain_core.prompts.prompt import PromptTemplate
 
-_template = """Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question.
-
-Chat History:
-{chat_history}
-Follow Up Input: {question}
-Standalone question:"""
-CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(_template)
-
-prompt_template = """Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.
-
-{context}
-
-Question: {question}
-Helpful Answer:"""
-QA_PROMPT = PromptTemplate(
-    template=prompt_template, input_variables=["context", "question"]
-)
-
- */
-
-
-
-    /*
-    - Instead of indexing entire documents, data is divided into smaller chunks, referred to as Parent and Child documents.
-
-    - Child documents are indexed for better representation of specific concepts, while parent documents are retrieved to ensure context retention.
-     */
-
-
-// TODO - customizzarlo simile a https://python.langchain.com/v0.1/docs/modules/data_connection/retrievers/custom_retriever/
-    //   con (...DocumentSplitter parentSplitter)
-public abstract class Neo4jEmbeddingRetriever implements ContentRetriever {
+public class Neo4jEmbeddingRetriever implements ContentRetriever {
     public static final String DEFAULT_PROMPT_ANSWER = """
             You are an assistant that helps to form nice and human
             understandable answers based on the provided information from tools.
             Do not add any other information that wasn't present in the tools, and use
-            very concise style in interpreting results!
+            very concise style in interpreting results.
+            
+            If you don't know the answer, just say that you don't know, don't try to make up an answer.
             """;
+    public static final String DEFAULT_PARENT_ID_KEY = "parentId";
     protected final EmbeddingModel embeddingModel;
     protected final ChatLanguageModel model;
     protected final ChatLanguageModel answerModel;
@@ -85,16 +53,13 @@ public abstract class Neo4jEmbeddingRetriever implements ContentRetriever {
     protected final Double minScore;
     protected final Neo4jEmbeddingStore embeddingStore;
     protected final String query;
+    protected final String parentIdKey;
     protected final Map<String, Object> params;
 
     /**
-     * // TODO --> EmbeddingSearchRequest javadoc
+     * Creates an instance of Neo4jEmbeddingRetriever
      * 
-     * @param embeddingModel
-     * @param driver
-     * @param maxResults
-     * @param minScore
-     * @param embeddingStore
+     * 
      */
     public Neo4jEmbeddingRetriever(EmbeddingModel embeddingModel,
                                    Driver driver,
@@ -107,21 +72,27 @@ public abstract class Neo4jEmbeddingRetriever implements ContentRetriever {
                                    String promptSystem,
                                    String promptUser,
                                    ChatLanguageModel answerModel,
-                                   String promptAnswer) {
-        this.embeddingModel = embeddingModel;
+                                   String promptAnswer,
+                                   String parentIdKey) {
+        this.embeddingModel = ensureNotNull(embeddingModel, "embeddingModel");
         this.driver = driver;
         this.maxResults = maxResults;
         this.minScore = minScore;
         this.query = query;
         this.params = params;
         this.model = model;
-        this.answerModel = answerModel;//getOrDefault(answerModel, model);
+        this.answerModel = answerModel;
         this.promptSystem = promptSystem;
         this.promptAnswer = getOrDefault(promptAnswer, DEFAULT_PROMPT_ANSWER);
+        this.parentIdKey = getOrDefault(parentIdKey, DEFAULT_PARENT_ID_KEY);
         this.promptUser = promptUser;
+        
         final Neo4jEmbeddingStore store = getOrDefault(embeddingStore, getDefaultEmbeddingStore(driver));
-
         this.embeddingStore = ensureNotNull(store, "embeddingStore");
+    }
+
+    public static Builder builder() {
+        return new Builder(Neo4jEmbeddingRetriever.class);
     }
     
     public Neo4jEmbeddingStore getDefaultEmbeddingStore(Driver driver) {
@@ -143,12 +114,11 @@ public abstract class Neo4jEmbeddingRetriever implements ContentRetriever {
 
                 TextSegment parentSegment = parentSegments.get(i);
                 String parentId = "parent_" + i;
-                parentSegment = getTextSegment(parentSegment, embeddingStore.getIdProperty(), null);
+                parentSegment = getTextSegmentWithUniqueId(parentSegment, embeddingStore.getIdProperty(), null);
 
                 // Store parent node
                 final Metadata metadata = document.metadata();
                 
-                final String parentIdKey = "parentId";
                 if (this.query != null) {
                     final Map<String, Object> metadataMap = metadata.toMap();
                     metadataMap.put(parentIdKey, parentId);
@@ -186,7 +156,7 @@ public abstract class Neo4jEmbeddingRetriever implements ContentRetriever {
 
                 if (childSplitter == null) {
                     final Embedding content = embeddingModel.embed(parentSegment).content();
-                    getAdditionalParams(parentIdKey, parentId);
+                    getAdditionalParams(parentId);
                     embeddingStore.add(content, parentSegment);
                     continue;
                 }
@@ -194,40 +164,26 @@ public abstract class Neo4jEmbeddingRetriever implements ContentRetriever {
                 final String idProperty = embeddingStore.getIdProperty();
                 List<TextSegment> childSegments = childSplitter.split(parentDoc)
                         .stream()
-                        .map(segment -> getTextSegment(segment, idProperty, parentId))
+                        .map(segment -> getTextSegmentWithUniqueId(segment, idProperty, parentId))
                         .toList();
 
                 final List<Embedding> embeddings = embeddingModel.embedAll(childSegments).content();
-                getAdditionalParams(parentIdKey, parentId);
+                getAdditionalParams(parentId);
                 embeddingStore.addAll(embeddings, childSegments);
         }
     }
 
-    private void getAdditionalParams(String parentIdKey, String parentId) {
+    private void getAdditionalParams(String parentId) {
         final HashMap<String, Object> params = new HashMap<>(this.params);
         params.put(parentIdKey, parentId);
         embeddingStore.setAdditionalParams(params);
     }
-//
-//    public void getDocumentToNeo4jQuery(Session session, Map<String, Object> params) {
-//        session.run(getQuery(), getParams(params));
-//    }
-//
-//    private static Map<String, Object> getParams(Map<String, Object> params) {
-//        return params;
-//    }
-//
-//    private static String getQuery() {
-//        return """
-//                    CREATE (:Parent $metadata)
-//                """;
-//    }
-
-
-    // TODO --> 
-    //  if `id` metadata is present, we create a new univocal one to prevent this error:
-    //  org.neo4j.driver.exceptions.ClientException: Node(1) already exists with label `Child` and property `id` = 'doc-ai'
-    public TextSegment getTextSegment(TextSegment segment, String idProperty, String parentId) {
+    
+    /**
+     * If `id` metadata is present, we create a new univocal one to prevent this error:
+     * org.neo4j.driver.exceptions.ClientException: Node(1) already exists with label `Child` and property `id` = 'doc-ai'
+     */
+    public static TextSegment getTextSegmentWithUniqueId(TextSegment segment, String idProperty, String parentId) {
         final Metadata metadata1 = segment.metadata();
         final Object idMeta = metadata1.toMap().get(idProperty);
         String value = parentId == null 
@@ -240,9 +196,7 @@ public abstract class Neo4jEmbeddingRetriever implements ContentRetriever {
 
         return segment;
     }
-
-    // TODO - reference FUNCTION_RESPONSE_SYSTEM: langchain/libs/community/langchain_community/chains/graph_qa/cypher.py
-
+    
     @Override
     public List<Content> retrieve(final Query query) {
 
@@ -289,5 +243,191 @@ public abstract class Neo4jEmbeddingRetriever implements ContentRetriever {
                 .map(embeddingMapFunction)
                 .toList();
     }
+
+    public static class Builder<T extends Builder, V extends Neo4jEmbeddingRetriever> {
+        private final Class<V> clazz;
+        
+        private EmbeddingModel embeddingModel;
+        private Driver driver;
+        private int maxResults = 10;
+        private double minScore = 0.7;
+        private String query;
+        private Map<String, Object> params = new HashMap<>();
+        private Neo4jEmbeddingStore embeddingStore;
+        private ChatLanguageModel model;
+        private String promptSystem;
+        private String promptUser;
+        private ChatLanguageModel answerModel;
+        private String promptAnswer;
+        private String parentIdKey;
+
+        public Builder(final Class<V> clazz) {
+            this.clazz = clazz;
+        }
+
+        /**
+         * @param embeddingModel the embedding model used to embed the query and documents
+         */
+        public T embeddingModel(EmbeddingModel embeddingModel) {
+            this.embeddingModel = embeddingModel;
+            return self();
+        }
+
+        /**
+         * @param driver the Neo4j driver to connect to the database
+         */
+        public T driver(Driver driver) {
+            this.driver = driver;
+            return self();
+        }
+
+        /**
+         * @param maxResults the maximum number of results to return
+         */
+        public T maxResults(int maxResults) {
+            this.maxResults = maxResults;
+            return self();
+        }
+
+        /**
+         * @param minScore the minimum similarity score threshold for results
+         */
+        public T minScore(double minScore) {
+            this.minScore = minScore;
+            return self();
+        }
+
+        /**
+         * @param query the Cypher query used to retrieve related documents
+         */
+        public T query(String query) {
+            this.query = query;
+            return self();
+        }
+
+        /**
+         * @param params the parameters to be used with the Cypher query
+         */
+        public T params(Map<String, Object> params) {
+            this.params = params;
+            return self();
+        }
+
+        /**
+         * @param embeddingStore a custom Neo4jEmbeddingStore (optional)
+         */
+        public T embeddingStore(Neo4jEmbeddingStore embeddingStore) {
+            this.embeddingStore = embeddingStore;
+            return self();
+        }
+
+        /**
+         * @param model the language model used for the question prompt
+         */
+        public T model(ChatLanguageModel model) {
+            this.model = model;
+            return self();
+        }
+
+        /**
+         * @param promptSystem the system prompt text
+         */
+        public T promptSystem(String promptSystem) {
+            this.promptSystem = promptSystem;
+            return self();
+        }
+
+        /**
+         * @param promptUser the user prompt template
+         */
+        public T promptUser(String promptUser) {
+            this.promptUser = promptUser;
+            return self();
+        }
+
+        /**
+         * @param answerModel the language model used to generate answers
+         */
+        public T answerModel(ChatLanguageModel answerModel) {
+            this.answerModel = answerModel;
+            return self();
+        }
+
+        /**
+         * @param promptAnswer the prompt template used to generate the answer (optional)
+         */
+        public T promptAnswer(String promptAnswer) {
+            this.promptAnswer = promptAnswer;
+            return self();
+        }
+
+        /**
+         * @param parentIdKey the key used to identify the parent document (optional)
+         */
+        public T parentIdKey(String parentIdKey) {
+            this.parentIdKey = parentIdKey;
+            return self();
+        }
+
+        protected T self() {
+            return (T) this;
+        }
+
+        public V build() {
+            try {
+                Constructor<V> constructor = clazz.getConstructor(
+                        EmbeddingModel.class,
+                        Driver.class,
+                        int.class,
+                        double.class,
+                        String.class,
+                        Map.class,
+                        Neo4jEmbeddingStore.class,
+                        ChatLanguageModel.class,
+                        String.class,
+                        String.class,
+                        ChatLanguageModel.class,
+                        String.class,
+                        String.class
+                );
+                return constructor.newInstance(
+                        embeddingModel,
+                        driver,
+                        maxResults,
+                        minScore,
+                        query,
+                        params,
+                        embeddingStore,
+                        model,
+                        promptSystem,
+                        promptUser,
+                        answerModel,
+                        promptAnswer,
+                        parentIdKey
+                );
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to create instance of " + clazz.getName(), e);
+            }
+        }
+        
+//        public T build() {
+//            return new T(
+//                    embeddingModel,
+//                    driver,
+//                    maxResults,
+//                    minScore,
+//                    query,
+//                    params,
+//                    embeddingStore,
+//                    model,
+//                    promptSystem,
+//                    promptUser,
+//                    answerModel,
+//                    promptAnswer,
+//                    parentIdKey
+//            );
+//        }
+    }
+
 
 }

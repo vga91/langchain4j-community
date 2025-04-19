@@ -1,4 +1,4 @@
-package dev.langchain4j.rag.content.retriever.neo4j;
+package dev.langchain4j.community.rag.content.retriever.neo4j;
 
 import dev.langchain4j.community.store.embedding.neo4j.Neo4jEmbeddingStore;
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -24,43 +24,7 @@ public class SummaryRetriever extends Neo4jEmbeddingRetriever {
             {{input}}
             
             Summary:
-            """; 
-            
-    
-    /*
-        MERGE (p:Parent {id: $parent_id})
-    SET p.text = $parent_text
-    WITH p
-    CALL db.create.setVectorProperty(p, 'embedding', $parent_embedding)
-    YIELD node
-    WITH p 
-    UNWIND $children AS child
-    MERGE (c:Child {id: child.id})
-    SET c.text = child.text
-    MERGE (c)<-[:HAS_CHILD]-(p)
-    WITH c, child
-    CALL db.create.setVectorProperty(c, 'embedding', child.embedding)
-    YIELD node
-    RETURN count(*)
-     */
-//    public static final String PARENT_QUERY =
-//            """
-//                        UNWIND $rows AS question
-//                        MERGE (p:Parent {id: $parentId})
-//                        // SET p.text = $parent_text
-//                        WITH p
-//                        CALL db.create.setVectorProperty(p, 'embedding', $parent_embedding)
-//                        YIELD node
-//                        WITH p\s
-//                        UNWIND $children AS child
-//                        MERGE (c:Child {id: child.id})
-//                        SET c.text = child.text
-//                        MERGE (c)<-[:HAS_CHILD]-(p)
-//                        WITH c, child
-//                        CALL db.create.setVectorProperty(c, 'embedding', child.embedding)
-//                        YIELD node
-//                        RETURN count(*)
-//                    """;
+            """;
 
     public static final String PARENT_QUERY =
 
@@ -74,7 +38,7 @@ public class SummaryRetriever extends Neo4jEmbeddingRetriever {
                 RETURN count(*)""";
     
     public SummaryRetriever(final EmbeddingModel embeddingModel, final Driver driver, final int maxResults, final double minScore, final Neo4jEmbeddingStore embeddingStore, final ChatLanguageModel chatModel) {
-            super(embeddingModel, driver, maxResults, minScore, "CREATE (:Parent $metadata)", Map.of(), embeddingStore, chatModel, SYSTEM_PROMPT, USER_PROMPT, null, null);
+            super(embeddingModel, driver, maxResults, minScore, "CREATE (:Parent $metadata)", Map.of(), embeddingStore, chatModel, SYSTEM_PROMPT, USER_PROMPT, null, null, null);
     }
 
     @Override
