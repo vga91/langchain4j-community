@@ -41,6 +41,10 @@ public class SummaryRetriever extends Neo4jEmbeddingRetriever {
             super(embeddingModel, driver, maxResults, minScore, "CREATE (:Parent $metadata)", Map.of(), embeddingStore, chatModel, SYSTEM_PROMPT, USER_PROMPT, null, null, null);
     }
 
+    public static Builder builder() {
+        return new Builder(SummaryRetriever.class);
+    }
+
     @Override
     public Neo4jEmbeddingStore getDefaultEmbeddingStore(final Driver driver) {
         return Neo4jEmbeddingStore.builder()
@@ -51,5 +55,11 @@ public class SummaryRetriever extends Neo4jEmbeddingRetriever {
                 .indexName("summary_embedding_index")
                 .dimension(384)
                 .build();
+    }
+    
+    public static class Builder extends Neo4jEmbeddingRetriever.Builder<ParentChildGraphRetriever.Builder, ParentChildGraphRetriever> {
+        public Builder(final Class clazz) {
+            super(clazz);
+        }
     }
 }

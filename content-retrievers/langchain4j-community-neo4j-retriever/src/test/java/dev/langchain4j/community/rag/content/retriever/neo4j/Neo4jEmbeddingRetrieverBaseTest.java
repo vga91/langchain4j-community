@@ -10,17 +10,14 @@ public class Neo4jEmbeddingRetrieverBaseTest extends Neo4jRetrieverBaseTest {
     protected static EmbeddingModel embeddingModel;
     
     @BeforeAll
-    public static void setUp() {
-        // todo - NEEDED?
+    public static void beforeAll() {
         Neo4jRetrieverBaseTest.beforeAll();
+        
         embeddingStore = Neo4jEmbeddingStore.builder()
                 .driver(driver)
-                .databaseName("neo4j")
                 .dimension(384)
                 .build();
         embeddingModel = new AllMiniLmL6V2QuantizedEmbeddingModel();
 
     }
-    
-    
 }

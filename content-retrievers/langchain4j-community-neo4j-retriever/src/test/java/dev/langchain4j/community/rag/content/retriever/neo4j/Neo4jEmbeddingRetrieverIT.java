@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 // OPENAI_API_KEY=demo;OPENAI_BASE_URL=http://langchain4j.dev/demo/openai/v1
 @EnabledIfEnvironmentVariable(named = "OPENAI_API_KEY", matches = ".+")
-public class ParentChildRetrieverIT extends Neo4jEmbeddingRetrieverBaseTest {
+public class Neo4jEmbeddingRetrieverIT extends Neo4jEmbeddingRetrieverBaseTest {
 
     ChatLanguageModel chatModel = OpenAiChatModel.builder()
             .baseUrl(System.getenv("OPENAI_BASE_URL"))
@@ -46,13 +46,6 @@ public class ParentChildRetrieverIT extends Neo4jEmbeddingRetrieverBaseTest {
             .logRequests(true)
             .logResponses(true)
             .build();
-    
-//    private static Neo4jContainer<?> neo4jContainer;
-//    private static Neo4jEmbeddingStore embeddingStore;
-//    private static Neo4jGraph graph;
-//    private static EmbeddingModel embeddingModel;
-//    private static Driver driver;
-//    private static ParentChildRetriever retriever;
     
     
     // TODO - test with Neo4jEmbeddingRetriever
