@@ -57,7 +57,7 @@ public class SummaryRetriever extends Neo4jEmbeddingRetriever {
                 .build();
     }
     
-    public static class Builder extends Neo4jEmbeddingRetriever.Builder<ParentChildGraphRetriever.Builder, ParentChildGraphRetriever> {
+    public static class Builder extends Neo4jEmbeddingRetriever.Builder<Builder, SummaryRetriever> {
         public Builder(final Class clazz) {
             super(clazz);
         }

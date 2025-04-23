@@ -24,10 +24,9 @@ public class Neo4jEmbeddingRetrieverTest extends Neo4jEmbeddingRetrieverBaseTest
     @Mock
     private ChatLanguageModel chatLanguageModel;
 
-    // todo - RIMUOVERE BASIC RETRIEVER, NON SERVE, SI PUO FARE DIRETTAMENTE CON IL NEO4JEMBEDDINGRETRIEVER
     @Test
     public void testBasicRetriever() {
-        final BasicRetriever retriever = BasicRetriever.builder()
+        final Neo4jEmbeddingRetriever retriever = Neo4jEmbeddingRetriever.builder()
                 .embeddingModel(embeddingModel)
                 .driver(driver)
                 .maxResults(1)
@@ -42,7 +41,7 @@ public class Neo4jEmbeddingRetrieverTest extends Neo4jEmbeddingRetrieverBaseTest
                 
                 Spaghetti carbonara and Italian dishes.
                 """,
-                Metadata.from(Map.of("title", "Quantum Mechanics", "source", "Wikipedia link"))
+                getMetadata()
         );
 
         // Child splitter: splits into sentences using OpenNLP
@@ -54,17 +53,13 @@ public class Neo4jEmbeddingRetrieverTest extends Neo4jEmbeddingRetrieverBaseTest
 
         // Query and validate results
         List<Content> results = retriever.retrieve(Query.from("fundamental theory"));
-        assertThat(results).hasSize(1);
 
-        Content result = results.get(0);
-
-        assertTrue(result.textSegment().text().toLowerCase().contains("fundamental theory"));
-        assertEquals("Wikipedia link", result.textSegment().metadata().getString("source"));
+        commonResults(results);
     }
+
     
     
     // TODO -- other retriever to be moved in another PR
-    
     @Test
     public void testParentChildRetrieverWithDocumentByRegexSplitter() {
 
@@ -98,11 +93,7 @@ public class Neo4jEmbeddingRetrieverTest extends Neo4jEmbeddingRetrieverBaseTest
 
         // Query and validate results
         List<Content> results = retriever.retrieve(Query.from("What is Machine Learning?"));
-        assertThat(results).hasSize(1);
-
-        Content result = results.get(0);
-
-        assertTrue(result.textSegment().text().toLowerCase().contains("machine learning"));
-        assertEquals("https://example.com/ai", result.textSegment().metadata().getString("source"));
+        commonResults(results);
     }
+    
 }

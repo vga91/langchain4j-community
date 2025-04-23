@@ -254,10 +254,10 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
         private String query;
         private Map<String, Object> params = new HashMap<>();
         private Neo4jEmbeddingStore embeddingStore;
-        private ChatLanguageModel model;
+        private ChatLanguageModel chatModel;
         private String promptSystem;
         private String promptUser;
-        private ChatLanguageModel answerModel;
+        private ChatLanguageModel chatAnswerModel;
         private String promptAnswer;
         private String parentIdKey;
 
@@ -322,10 +322,10 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
         }
 
         /**
-         * @param model the language model used for the question prompt
+         * @param chatLanguageModel the language model used for the question prompt
          */
-        public T model(ChatLanguageModel model) {
-            this.model = model;
+        public T chatModel(ChatLanguageModel chatLanguageModel) {
+            this.chatModel = chatLanguageModel;
             return self();
         }
 
@@ -349,7 +349,7 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
          * @param answerModel the language model used to generate answers
          */
         public T answerModel(ChatLanguageModel answerModel) {
-            this.answerModel = answerModel;
+            this.chatAnswerModel = answerModel;
             return self();
         }
 
@@ -398,10 +398,10 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
                         query,
                         params,
                         embeddingStore,
-                        model,
+                        chatModel,
                         promptSystem,
                         promptUser,
-                        answerModel,
+                        chatAnswerModel,
                         promptAnswer,
                         parentIdKey
                 );
@@ -409,24 +409,6 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
                 throw new RuntimeException("Failed to create instance of " + clazz.getName(), e);
             }
         }
-        
-//        public T build() {
-//            return new T(
-//                    embeddingModel,
-//                    driver,
-//                    maxResults,
-//                    minScore,
-//                    query,
-//                    params,
-//                    embeddingStore,
-//                    model,
-//                    promptSystem,
-//                    promptUser,
-//                    answerModel,
-//                    promptAnswer,
-//                    parentIdKey
-//            );
-//        }
     }
 
 
