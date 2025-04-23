@@ -3,9 +3,7 @@ package dev.langchain4j.community.rag.content.retriever.neo4j;
 import dev.langchain4j.community.store.embedding.neo4j.Neo4jEmbeddingStore;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.DocumentSplitter;
-import dev.langchain4j.data.document.Metadata;
 import dev.langchain4j.data.document.splitter.DocumentByRegexSplitter;
-import dev.langchain4j.data.document.splitter.DocumentBySentenceSplitter;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -33,6 +31,7 @@ public class Neo4jEmbeddingRetrieverTest extends Neo4jEmbeddingRetrieverBaseTest
     @Mock
     private ChatLanguageModel chatLanguageModel;
 
+
     @Test
     public void testBasicRetriever() {
         final Neo4jEmbeddingRetriever retriever = Neo4jEmbeddingRetriever.builder()
@@ -43,7 +42,7 @@ public class Neo4jEmbeddingRetrieverTest extends Neo4jEmbeddingRetrieverBaseTest
                 .minScore(0.4)
                 .build();
 
-        Document parentDoc = getDocument();
+        Document parentDoc = getDocumentMiscTopics();
 
         // Child splitter: splits into sentences using OpenNLP
         final String expectedQuery = "\\n\\n";
@@ -61,30 +60,11 @@ public class Neo4jEmbeddingRetrieverTest extends Neo4jEmbeddingRetrieverBaseTest
 
     @Test
     public void testRetrieverWithChatModel() {
-        String customRetrieval = """
-            MATCH (node)<-[:HAS_CHILD]-(parent)
-            WITH parent, collect(node.text) AS chunks, max(score) AS score
-            RETURN parent.text + reduce(r = "", c in chunks | r + "\\n\\n" + c) AS text,
-                   score,
-                   properties(parent) AS metadata
-            ORDER BY score DESC
-            LIMIT $maxResults""";
-
-        String creationQuery =
-                """
-                    UNWIND $rows AS row
-                    MATCH (p:Parent {parentId: $parentId})
-                    CREATE (p)-[:HAS_CHILD]->(u:%1$s {%2$s: row.%2$s})
-                    SET u += row.%3$s
-                    WITH row, u
-                    CALL db.create.setNodeVectorProperty(u, $embeddingProperty, row.%4$s)
-                    RETURN count(*)""";
-
 
         final Neo4jEmbeddingStore neo4jEmbeddingStore = Neo4jEmbeddingStore.builder()
                 .driver(driver)
-                .retrievalQuery(customRetrieval)
-                .entityCreationQuery(creationQuery)
+                .retrievalQuery(CUSTOM_RETRIEVAL)
+                .entityCreationQuery(CUSTOM_CREATION_QUERY)
                 .label("Chunk")
                 .indexName("chunk_embedding_index")
                 .dimension(384)
@@ -100,13 +80,13 @@ public class Neo4jEmbeddingRetrieverTest extends Neo4jEmbeddingRetrieverBaseTest
                 .maxResults(2)
                 .minScore(0.4)
                 .chatModel(chatLanguageModel)
-                .query("CREATE (:Parent $metadata)")
+                .query("CREATE (:MainDoc $metadata)")
                 .promptUser("mock prompt user")
                 .promptSystem("mock prompt system")
                 .promptAnswer("mock prompt anwser")
                 .build();
 
-        Document parentDoc = getDocument();
+        Document parentDoc = getDocumentMiscTopics();
 
         // Child splitter: splits into sentences using OpenNLP
         final String expectedQuery = "\\n\\n";
@@ -120,32 +100,14 @@ public class Neo4jEmbeddingRetrieverTest extends Neo4jEmbeddingRetrieverBaseTest
         
     }
 
+    // TODO - change with cypher-dsl
     @Test
     public void testBasicRetrieverWithChatQuestionAndAnswerModel() {
-        String customRetrieval = """
-            MATCH (node)<-[:HAS_CHILD]-(parent)
-            WITH parent, collect(node.text) AS chunks, max(score) AS score
-            RETURN parent.text + reduce(r = "", c in chunks | r + "\\n\\n" + c) AS text,
-                   score,
-                   properties(parent) AS metadata
-            ORDER BY score DESC
-            LIMIT $maxResults""";
-
-        String creationQuery =
-                """
-                    UNWIND $rows AS row
-                    MATCH (p:Parent {parentId: $parentId})
-                    CREATE (p)-[:HAS_CHILD]->(u:%1$s {%2$s: row.%2$s})
-                    SET u += row.%3$s
-                    WITH row, u
-                    CALL db.create.setNodeVectorProperty(u, $embeddingProperty, row.%4$s)
-                    RETURN count(*)""";
-
-
+        
         final Neo4jEmbeddingStore neo4jEmbeddingStore = Neo4jEmbeddingStore.builder()
                 .driver(driver)
-                .retrievalQuery(customRetrieval)
-                .entityCreationQuery(creationQuery)
+                .retrievalQuery(CUSTOM_RETRIEVAL)
+                .entityCreationQuery(CUSTOM_CREATION_QUERY)
                 .label("Chunk")
                 .indexName("chunk_embedding_index")
                 .dimension(384)
@@ -167,13 +129,13 @@ public class Neo4jEmbeddingRetrieverTest extends Neo4jEmbeddingRetrieverBaseTest
                 .minScore(0.4)
                 .chatModel(chatLanguageModel)
                 .answerModel(chatLanguageModel)
-                .query("CREATE (:Parent $metadata)")
+                .query("CREATE (:MainDoc $metadata)")
                 .promptUser("mock prompt user")
                 .promptSystem("mock prompt system")
                 .promptAnswer("mock prompt anwser")
                 .build();
 
-        Document parentDoc = getDocument();
+        Document parentDoc = getDocumentMiscTopics();
 
         // Child splitter: splits into sentences using OpenNLP
         final String expectedQuery = "\\n\\n";
@@ -188,35 +150,14 @@ public class Neo4jEmbeddingRetrieverTest extends Neo4jEmbeddingRetrieverBaseTest
         Content result = results.get(0);
         assertTrue(result.textSegment().text().toLowerCase().contains(chatResponse));
     }
-    
-    // TODO - parentIdKey
-    
-    // TODO - params
+
     @Test
     void testRetrieverWithCustomRetrievalAndEmbeddingCreationQuery() {
-        String customRetrieval = """
-            MATCH (node)<-[:HAS_CHILD]-(parent)
-            WITH parent, collect(node.text) AS chunks, max(score) AS score
-            RETURN parent.text + reduce(r = "", c in chunks | r + "\\n\\n" + c) AS text,
-                   score,
-                   properties(parent) AS metadata
-            ORDER BY score DESC
-            LIMIT $maxResults""";
-
-        String creationQuery =
-                """
-                    UNWIND $rows AS row
-                    MATCH (p:Parent {parentId: $parentId})
-                    CREATE (p)-[:HAS_CHILD]->(u:%1$s {%2$s: row.%2$s})
-                    SET u += row.%3$s
-                    WITH row, u
-                    CALL db.create.setNodeVectorProperty(u, $embeddingProperty, row.%4$s)
-                    RETURN count(*)""";
 
         final Neo4jEmbeddingStore neo4jEmbeddingStore = Neo4jEmbeddingStore.builder()
                 .driver(driver)
-                .retrievalQuery(customRetrieval)
-                .entityCreationQuery(creationQuery)
+                .retrievalQuery(CUSTOM_RETRIEVAL)
+                .entityCreationQuery(CUSTOM_CREATION_QUERY)
                 .label("Chunk")
                 .indexName("chunk_embedding_index")
                 .dimension(384)
@@ -225,22 +166,15 @@ public class Neo4jEmbeddingRetrieverTest extends Neo4jEmbeddingRetrieverBaseTest
         final Neo4jEmbeddingRetriever retriever = Neo4jEmbeddingRetriever.builder()
                 .embeddingModel(embeddingModel)
                 .driver(driver)
-                .query("CREATE (:Parent $metadata)")
+                .query("CREATE (:MainDoc $metadata)")
                 .maxResults(5)
                 .minScore(0.4)
                 .embeddingStore(neo4jEmbeddingStore)
                 .build();
 
-        Document doc = Document.from(
-                """
-                Artificial Intelligence (AI) is a field of computer science. It focuses on creating intelligent agents capable of performing tasks that require human intelligence.
-        
-                Machine Learning (ML) is a subset of AI. It uses data to learn patterns and make predictions. Deep Learning is a specialized form of ML based on neural networks.
-                """,
-                getMetadata()
-        );
+        Document doc = getDocumentAI();
 
-        // Parent splitter splits on paragraphs (double newlines)
+        // MainDoc splitter splits on paragraphs (double newlines)
         final String expectedQuery = "\\n\\n";
         int maxSegmentSize = 250;
         DocumentSplitter parentSplitter = new DocumentByRegexSplitter(expectedQuery, expectedQuery, maxSegmentSize, 0);
@@ -257,37 +191,69 @@ public class Neo4jEmbeddingRetrieverTest extends Neo4jEmbeddingRetrieverBaseTest
         assertThat(results).hasSize(2);
     }
 
+    // TODO - change with cypher-dsl
     @Test
-    void testRetrieverWithCustomRetrievalAndEmbeddingCreationQueryAndPreInsertedData() {
-        String customRetrieval = """
-            MATCH (node)<-[:HAS_CHILD]-(parent)
-            WITH parent, collect(node.text) AS chunks, max(score) AS score
-            RETURN parent.text + reduce(r = "", c in chunks | r + "\\n\\n" + c) AS text,
-                   score,
-                   properties(parent) AS metadata
-            ORDER BY score DESC
-            LIMIT $maxResults""";
-
-        String creationQuery =
-                """
-                    UNWIND $rows AS row
-                    MATCH (p:Parent {parentId: $parentId})
-                    CREATE (p)-[:HAS_CHILD]->(u:%1$s {%2$s: row.%2$s})
-                    SET u += row.%3$s
-                    WITH row, u
-                    CALL db.create.setNodeVectorProperty(u, $embeddingProperty, row.%4$s)
-                    RETURN count(*)""";
-
+    void testRetrieverWithCustomRetrievalAndEmbeddingCreationQueryMainDocIdAndParams() {
+        String customCreationQuery = """
+                UNWIND $rows AS row
+                MATCH (p:MainDoc {customParentId: $customParentId})
+                CREATE (p)-[:REFERS_TO]->(u:%1$s {%2$s: row.%2$s})
+                SET u += row.%3$s
+                WITH row, u
+                CALL db.create.setNodeVectorProperty(u, $embeddingProperty, row.%4$s)
+                RETURN count(*)""";
         final Neo4jEmbeddingStore neo4jEmbeddingStore = Neo4jEmbeddingStore.builder()
                 .driver(driver)
-                .retrievalQuery(customRetrieval)
-                .entityCreationQuery(creationQuery)
+                .retrievalQuery(CUSTOM_RETRIEVAL)
+                .entityCreationQuery(customCreationQuery)
                 .label("Chunk")
                 .indexName("chunk_embedding_index")
                 .dimension(384)
                 .build();
 
-        seedTestParentChildData();
+        final Neo4jEmbeddingRetriever retriever = Neo4jEmbeddingRetriever.builder()
+                .embeddingModel(embeddingModel)
+                .driver(driver)
+                .query("CREATE (:MainDoc $metadata)")
+                .parentIdKey("customParentId")
+                .params(Map.of("customMainDocId", "foo", "bar", 1))
+                .maxResults(5)
+                .minScore(0.4)
+                .embeddingStore(neo4jEmbeddingStore)
+                .build();
+
+        Document doc = getDocumentAI();
+
+        // MainDoc splitter splits on paragraphs (double newlines)
+        final String expectedQuery = "\\n\\n";
+        int maxSegmentSize = 250;
+        DocumentSplitter parentSplitter = new DocumentByRegexSplitter(expectedQuery, expectedQuery, maxSegmentSize, 0);
+
+        // Child splitter splits on periods (sentences)
+        final String expectedQueryChild = "\\. ";
+        DocumentSplitter childSplitter = new DocumentByRegexSplitter(expectedQueryChild, expectedQuery, maxSegmentSize, 0);
+
+        // Index the document into Neo4j as parent-child nodes
+        retriever.index(doc, parentSplitter, childSplitter);
+
+        final String retrieveQuery = "Machine Learning";
+        List<Content> results = retriever.retrieve(Query.from(retrieveQuery));
+        assertThat(results).hasSize(2);
+    }
+
+    @Test
+    void testRetrieverWithCustomRetrievalAndEmbeddingCreationQueryAndPreInsertedData() {
+
+        final Neo4jEmbeddingStore neo4jEmbeddingStore = Neo4jEmbeddingStore.builder()
+                .driver(driver)
+                .retrievalQuery(CUSTOM_RETRIEVAL)
+                .entityCreationQuery(CUSTOM_CREATION_QUERY)
+                .label("Chunk")
+                .indexName("chunk_embedding_index")
+                .dimension(384)
+                .build();
+
+        seedMainDocAndChildData();
 
         final Neo4jEmbeddingRetriever retriever = Neo4jEmbeddingRetriever.builder()
                 .embeddingModel(embeddingModel)
