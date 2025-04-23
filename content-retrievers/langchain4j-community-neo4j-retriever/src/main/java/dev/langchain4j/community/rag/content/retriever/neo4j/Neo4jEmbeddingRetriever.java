@@ -76,6 +76,9 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
                                    String promptAnswer,
                                    String parentIdKey) {
         this.embeddingModel = ensureNotNull(embeddingModel, "embeddingModel");
+        final Neo4jEmbeddingStore store = getOrDefault(embeddingStore, getDefaultEmbeddingStore(driver));
+        this.embeddingStore = ensureNotNull(store, "embeddingStore");
+        
         this.driver = driver;
         this.maxResults = maxResults;
         this.minScore = minScore;
@@ -87,9 +90,6 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
         this.promptAnswer = getOrDefault(promptAnswer, DEFAULT_PROMPT_ANSWER);
         this.parentIdKey = getOrDefault(parentIdKey, DEFAULT_PARENT_ID_KEY);
         this.promptUser = promptUser;
-        
-        final Neo4jEmbeddingStore store = getOrDefault(embeddingStore, getDefaultEmbeddingStore(driver));
-        this.embeddingStore = ensureNotNull(store, "embeddingStore");
     }
 
     public static Builder builder() {
@@ -104,7 +104,13 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
                       DocumentSplitter parentSplitter) {
         index(document, parentSplitter, null);
     }
-    
+
+    /**
+     * 
+     * @param document the document to be split
+     * @param parentSplitter main splitter
+     * @param childSplitter sub-splitter to be used with ParentChildRetriever or with a custom retriever
+     */
     public void index(Document document,
                       DocumentSplitter parentSplitter,
                       DocumentSplitter childSplitter) {

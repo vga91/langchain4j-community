@@ -12,6 +12,8 @@ import dev.langchain4j.rag.query.Query;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.neo4j.driver.Value;
+import org.neo4j.driver.Values;
 
 import java.util.List;
 import java.util.Map;
@@ -37,21 +39,63 @@ public class Neo4jEmbeddingRetrieverBaseTest extends Neo4jRetrieverBaseTest {
     }
 
     // todo - RIMUOVERE BASIC RETRIEVER, NON SERVE, SI PUO FARE DIRETTAMENTE CON IL NEO4JEMBEDDINGRETRIEVER
-
+    
+    protected static @NotNull Document getDocument() {
+        return Document.from(
+                """
+                        Quantum mechanics studies how particles behave. It is a fundamental theory in physics.
+                                        
+                        Gradient descent and backpropagation algorithms.
+                                        
+                        Spaghetti carbonara and Italian dishes.
+                        """,
+                getMetadata()
+        );
+    }
 
     protected static Metadata getMetadata() {
         return Metadata.from(Map.of("title", "Quantum Mechanics", "source", "Wikipedia link", "url", "https://example.com/ai"));
     }
 
 
-    protected static void commonResults(List<Content> results) {
+    protected static void commonResults(List<Content> results, String retrieveQuery) {
         assertThat(results).hasSize(1);
 
         Content result = results.get(0);
 
-        assertTrue(result.textSegment().text().toLowerCase().contains("fundamental theory"));
+        assertTrue(result.textSegment().text().toLowerCase().contains(retrieveQuery));
         assertEquals("Wikipedia link", result.textSegment().metadata().getString("source"));
-        assertEquals("https://example.com/ai", result.textSegment().metadata().getString("source"));
+        assertEquals("https://example.com/ai", result.textSegment().metadata().getString("url"));
+    }
+
+    protected static void seedTestParentChildData() {
+        try (var session = driver.session()) {
+            session.run("MATCH (n) DETACH DELETE n");
+
+            final String text1 = "Gradient descent and backpropagation algorithms";
+            final Value embedding1 = Values.value(embeddingModel.embed(text1).content().vector());
+            final String text2 = "Spaghetti carbonara and Italian dishes";
+            final Value embedding2 = Values.value(embeddingModel.embed(text2).content().vector());
+            final String text3 = "Quantum entanglement and uncertainty principles";
+            final Value embedding3 = Values.value(embeddingModel.embed(text3).content().vector());
+
+            session.run("""
+                CREATE (p1:Document {id: 'p1', text: 'Parent about machine learning', source: 'ml'})
+                CREATE (p2:Document {id: 'p2', text: 'Parent about cooking', source: 'food'})
+                CREATE (p3:Document {id: 'p3', text: 'Parent about quantum physics', source: 'science'})
+
+                CREATE (c1:Chunk {id: 'c1', text: $text1, embedding: $embedding1})
+                CREATE (c2:Chunk {id: 'c2', text: $text2, embedding: $embedding2})
+                CREATE (c3:Chunk {id: 'c3', text: $text3, embedding: $embedding3})
+
+                CREATE (p1)-[:HAS_CHILD]->(c1)
+                CREATE (p2)-[:HAS_CHILD]->(c2)
+                CREATE (p3)-[:HAS_CHILD]->(c3)
+            """,
+                    Map.of("text1", text1, "embedding1", embedding1,
+                            "text2", text2, "embedding2", embedding2,
+                            "text3", text3, "embedding3", embedding3));
+        }
     }
 
 
