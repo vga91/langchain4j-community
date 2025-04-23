@@ -111,6 +111,10 @@ public class Neo4jEmbeddingRetrieverIT extends Neo4jEmbeddingRetrieverBaseTest {
 
 
     // TODO -- other retriever to be moved in another PR
+    
+    // TODO - SCRIVERE SULL'ALTRA PR
+    // the BasicRetriever implementation is not needed, since it should be just a  public class BasicRetriever extends Neo4jEmbeddingRetriever {
+        // without other implementations. We can directly use Neo4jEmbeddingRetriever 
 
     @Test
     public void testSummaryRetriever_withDocumentByRegexSplitter() {

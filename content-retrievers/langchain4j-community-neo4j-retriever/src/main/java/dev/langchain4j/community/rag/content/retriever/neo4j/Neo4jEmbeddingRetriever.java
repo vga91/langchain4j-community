@@ -43,7 +43,7 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
             """;
     public static final String DEFAULT_PARENT_ID_KEY = "parentId";
     protected final EmbeddingModel embeddingModel;
-    protected final ChatLanguageModel model;
+    protected final ChatLanguageModel questionModel;
     protected final ChatLanguageModel answerModel;
     protected final String promptSystem;
     protected final String promptUser;
@@ -59,6 +59,7 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
     /**
      * Creates an instance of Neo4jEmbeddingRetriever
      * 
+     * TODO
      * 
      */
     public Neo4jEmbeddingRetriever(EmbeddingModel embeddingModel,
@@ -68,7 +69,7 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
                                    String query,
                                    Map<String, Object> params,
                                    Neo4jEmbeddingStore embeddingStore,
-                                   ChatLanguageModel model,
+                                   ChatLanguageModel questionModel,
                                    String promptSystem,
                                    String promptUser,
                                    ChatLanguageModel answerModel,
@@ -80,7 +81,7 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
         this.minScore = minScore;
         this.query = query;
         this.params = params;
-        this.model = model;
+        this.questionModel = questionModel;
         this.answerModel = answerModel;
         this.promptSystem = promptSystem;
         this.promptAnswer = getOrDefault(promptAnswer, DEFAULT_PROMPT_ANSWER);
@@ -92,7 +93,7 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
     }
 
     public static Builder builder() {
-        return new Builder(Neo4jEmbeddingRetriever.class);
+        return new Builder();
     }
     
     public Neo4jEmbeddingStore getDefaultEmbeddingStore(Driver driver) {
@@ -126,7 +127,7 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
                     String textInput =  parentSegment.text();
                     String text;
 
-                    if (this.model != null) {
+                    if (this.questionModel != null) {
                         if (promptSystem == null || promptUser == null) {
                             throw new RuntimeException("");
                         }
@@ -138,7 +139,7 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
 
                         final List<ChatMessage> chatMessages = List.of(systemMessage, userMessage);
 
-                        text = this.model.chat(chatMessages).aiMessage().text();
+                        text = this.questionModel.chat(chatMessages).aiMessage().text();
                     } else {
                         text = textInput;
                     }
@@ -245,25 +246,19 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
     }
 
     public static class Builder<T extends Builder, V extends Neo4jEmbeddingRetriever> {
-        private final Class<V> clazz;
-        
-        private EmbeddingModel embeddingModel;
-        private Driver driver;
-        private int maxResults = 10;
-        private double minScore = 0.7;
-        private String query;
-        private Map<String, Object> params = new HashMap<>();
-        private Neo4jEmbeddingStore embeddingStore;
-        private ChatLanguageModel chatModel;
-        private String promptSystem;
-        private String promptUser;
-        private ChatLanguageModel chatAnswerModel;
-        private String promptAnswer;
-        private String parentIdKey;
-
-        public Builder(final Class<V> clazz) {
-            this.clazz = clazz;
-        }
+        protected EmbeddingModel embeddingModel;
+        protected Driver driver;
+        protected int maxResults = 10;
+        protected double minScore = 0.7;
+        protected String query;
+        protected Map<String, Object> params = new HashMap<>();
+        protected Neo4jEmbeddingStore embeddingStore;
+        protected ChatLanguageModel chatModel;
+        protected String promptSystem;
+        protected String promptUser;
+        protected ChatLanguageModel chatAnswerModel;
+        protected String promptAnswer;
+        protected String parentIdKey;
 
         /**
          * @param embeddingModel the embedding model used to embed the query and documents
@@ -373,41 +368,22 @@ public class Neo4jEmbeddingRetriever implements ContentRetriever {
             return (T) this;
         }
 
-        public V build() {
-            try {
-                Constructor<V> constructor = clazz.getConstructor(
-                        EmbeddingModel.class,
-                        Driver.class,
-                        int.class,
-                        double.class,
-                        String.class,
-                        Map.class,
-                        Neo4jEmbeddingStore.class,
-                        ChatLanguageModel.class,
-                        String.class,
-                        String.class,
-                        ChatLanguageModel.class,
-                        String.class,
-                        String.class
-                );
-                return constructor.newInstance(
-                        embeddingModel,
-                        driver,
-                        maxResults,
-                        minScore,
-                        query,
-                        params,
-                        embeddingStore,
-                        chatModel,
-                        promptSystem,
-                        promptUser,
-                        chatAnswerModel,
-                        promptAnswer,
-                        parentIdKey
-                );
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to create instance of " + clazz.getName(), e);
-            }
+        public Neo4jEmbeddingRetriever build() {
+            return new Neo4jEmbeddingRetriever(
+                    embeddingModel,
+                    driver,
+                    maxResults,
+                    minScore,
+                    query,
+                    params,
+                    embeddingStore,
+                    chatModel,
+                    promptSystem,
+                    promptUser,
+                    chatAnswerModel,
+                    promptAnswer,
+                    parentIdKey
+            );
         }
     }
 

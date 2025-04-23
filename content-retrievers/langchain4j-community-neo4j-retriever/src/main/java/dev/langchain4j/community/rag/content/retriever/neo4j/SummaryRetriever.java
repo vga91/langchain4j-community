@@ -36,13 +36,13 @@ public class SummaryRetriever extends Neo4jEmbeddingRetriever {
                 WITH row, u
                 CALL db.create.setNodeVectorProperty(u, $embeddingProperty, row.%4$s)
                 RETURN count(*)""";
-    
-    public SummaryRetriever(final EmbeddingModel embeddingModel, final Driver driver, final int maxResults, final double minScore, final Neo4jEmbeddingStore embeddingStore, final ChatLanguageModel chatModel) {
-            super(embeddingModel, driver, maxResults, minScore, "CREATE (:Parent $metadata)", Map.of(), embeddingStore, chatModel, SYSTEM_PROMPT, USER_PROMPT, null, null, null);
+
+    public SummaryRetriever(final EmbeddingModel embeddingModel, final Driver driver, final int maxResults, final double minScore, final Map<String, Object> params, final Neo4jEmbeddingStore embeddingStore, final ChatLanguageModel questionModel, final ChatLanguageModel answerModel, final String promptAnswer) {
+        super(embeddingModel, driver, maxResults, minScore, "CREATE (:Parent $metadata)", params, embeddingStore, questionModel, SYSTEM_PROMPT, USER_PROMPT, answerModel, promptAnswer, null);
     }
 
     public static Builder builder() {
-        return new Builder(SummaryRetriever.class);
+        return new Builder();
     }
 
     @Override
@@ -58,8 +58,20 @@ public class SummaryRetriever extends Neo4jEmbeddingRetriever {
     }
     
     public static class Builder extends Neo4jEmbeddingRetriever.Builder<Builder, SummaryRetriever> {
-        public Builder(final Class clazz) {
-            super(clazz);
+
+        @Override
+        public SummaryRetriever build() {
+            return new SummaryRetriever(
+                    embeddingModel,
+                    driver,
+                    maxResults,
+                    minScore,
+                    params,
+                    embeddingStore,
+                    chatModel,
+                    chatAnswerModel,
+                    promptAnswer
+            )
         }
     }
 }

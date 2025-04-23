@@ -17,7 +17,6 @@ public class ParentChildGraphRetriever extends Neo4jEmbeddingRetriever {
             LIMIT $maxResults""";
 
     public static final String PARENT_QUERY =
-
             """
                 UNWIND $rows AS row
                 MATCH (p:Parent {parentId: $parentId})
@@ -47,18 +46,20 @@ public class ParentChildGraphRetriever extends Neo4jEmbeddingRetriever {
     }
 
     public static Builder builder() {
-        return new Builder(ParentChildGraphRetriever.class);
+        return new Builder();
     }
 
     public static class Builder extends Neo4jEmbeddingRetriever.Builder<Builder, ParentChildGraphRetriever> {
-        public Builder(final Class clazz) {
-            super(clazz);
-        }
 
-//        @Override
-//        public ParentChildGraphRetriever build() {
-//            return super.build();
-//        }
+        @Override
+        public ParentChildGraphRetriever build() {
+            return new ParentChildGraphRetriever(
+                    embeddingModel,
+                    driver,
+                    maxResults,
+                    minScore,
+                    embeddingStore);
+        }
     }
 
 
