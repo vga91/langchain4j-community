@@ -3,7 +3,7 @@ package dev.langchain4j.community.store.embedding.neo4j;
 // import dev.langchain4j.model.chat.ChatLanguageModel;
 import org.neo4j.driver.Driver;
 
-public class SummaryRetriever extends Neo4jEmbeddingStoreIngestor {
+public class SummaryGraphIngestor extends Neo4jEmbeddingStoreIngestor {
     public final static String DEFAULT_RETRIEVAL = """
             MATCH (node)<-[:HAS_SUMMARY]-(parent)
             WITH parent, max(score) AS score, node // deduplicate parents
@@ -33,7 +33,7 @@ public class SummaryRetriever extends Neo4jEmbeddingStoreIngestor {
                 CALL db.create.setNodeVectorProperty(u, $embeddingProperty, row.%4$s)
                 RETURN count(*)""";
 
-    public SummaryRetriever(final IngestorConfig config) {
+    public SummaryGraphIngestor(final IngestorConfig config) {
         super(config);
     }
 
@@ -72,8 +72,12 @@ public class SummaryRetriever extends Neo4jEmbeddingStoreIngestor {
         return new Builder();
     }
 
-    // @Override
-    public Neo4jEmbeddingStore getDefaultEmbeddingStore(final Driver driver) {
+    @Override
+    public Neo4jEmbeddingStore getEmbeddingStore() {
+        return getNeo4jEmbeddingStore(driver);
+    }
+
+    private static Neo4jEmbeddingStore getNeo4jEmbeddingStore(Driver driver) {
         return Neo4jEmbeddingStore.builder()
                 .driver(driver)
                 .retrievalQuery(DEFAULT_RETRIEVAL)
@@ -83,8 +87,33 @@ public class SummaryRetriever extends Neo4jEmbeddingStoreIngestor {
                 .dimension(384)
                 .build();
     }
-    
+
+//    private static Neo4jEmbeddingStore getNeo4jEmbeddingStore(Driver driver) {
+//        return 
+//    }
+
     public static class Builder extends Neo4jEmbeddingStoreIngestor.Builder {
+
+        @Override
+        protected String getSystemPrompt() {
+            return SYSTEM_PROMPT;
+        }
+
+        @Override
+        protected String getUserPrompt() {
+            return USER_PROMPT;
+        }
+
+        @Override
+        protected String getQuery() {
+            return "CREATE (:Parent $metadata)";
+        }
+
+        // TODO - change it?????
+        @Override
+        protected Neo4jEmbeddingStore getEmbeddingStore() {
+            return getNeo4jEmbeddingStore(driver);
+        }
 
         @Override
         protected Builder self() {
@@ -92,8 +121,8 @@ public class SummaryRetriever extends Neo4jEmbeddingStoreIngestor {
         }
 
         @Override
-        public SummaryRetriever build() {
-            return new SummaryRetriever(createIngestorConfig());
+        public SummaryGraphIngestor build() {
+            return new SummaryGraphIngestor(createIngestorConfig());
         }
     }
 }

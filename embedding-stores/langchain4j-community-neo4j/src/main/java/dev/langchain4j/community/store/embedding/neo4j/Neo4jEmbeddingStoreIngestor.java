@@ -104,7 +104,6 @@ public class Neo4jEmbeddingStoreIngestor extends ParentChildEmbeddingStoreIngest
                 config.questionModel()
         );
     }
-    
 
     /**
      * Constructs a new {@code Neo4jEmbeddingStoreIngestor}, which processes documents through a transformation
@@ -159,7 +158,8 @@ public class Neo4jEmbeddingStoreIngestor extends ParentChildEmbeddingStoreIngest
         this.params = copy(params);
         this.parentIdKey = getOrDefault(parentIdKey, DEFAULT_PARENT_ID_KEY);
 
-        this.neo4jEmbeddingStore = getDefaultEmbeddingStore();
+        this.neo4jEmbeddingStore = embeddingStore;
+//        this.neo4jEmbeddingStore = getEmbeddingStore();
         super.textSegmentTransformer = getOrDefault(textSegmentTransformer, getTextSegmentTransformer());
         super.childTextSegmentTransformer =
                 getOrDefault(childTextSegmentTransformer, getDefaultChildTextSegmentTransformer());
@@ -230,8 +230,8 @@ public class Neo4jEmbeddingStoreIngestor extends ParentChildEmbeddingStoreIngest
         return segment;
     }
 
-    public Neo4jEmbeddingStore getDefaultEmbeddingStore() {
-        return null;
+    public Neo4jEmbeddingStore getEmbeddingStore() {
+        return neo4jEmbeddingStore;
     }
 
     public static Neo4jEmbeddingStoreIngestor.Builder builder() {
@@ -325,16 +325,32 @@ public class Neo4jEmbeddingStoreIngestor extends ParentChildEmbeddingStoreIngest
                     textSegmentTransformer,
                     childTextSegmentTransformer,
                     embeddingModel,
-                    (Neo4jEmbeddingStore) embeddingStore,
+                    getEmbeddingStore(),
                     documentChildSplitter,
                     driver,
-                    query,
+                    getQuery(),
                     parentIdKey,
                     params,
-                    systemPrompt,
-                    userPrompt,
+                    getSystemPrompt(),
+                    getUserPrompt(),
                     questionModel
             );
+        }
+
+        protected String getSystemPrompt() {
+            return systemPrompt;
+        }
+
+        protected String getUserPrompt() {
+            return userPrompt;
+        }
+
+        protected String getQuery() {
+            return query;
+        }
+
+        protected Neo4jEmbeddingStore getEmbeddingStore() {
+            return (Neo4jEmbeddingStore) embeddingStore;
         }
     }
 }
