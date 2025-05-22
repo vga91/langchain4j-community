@@ -1,13 +1,8 @@
-package dev.langchain4j.community.rag.content.retriever.neo4j;
+package dev.langchain4j.community.store.embedding.neo4j;
 
-import dev.langchain4j.community.store.embedding.neo4j.Neo4jEmbeddingStore;
-import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.embedding.EmbeddingModel;
 import org.neo4j.driver.Driver;
 
-import java.util.Map;
-
-public class HypotheticalQuestionRetriever extends Neo4jEmbeddingRetriever {
+public class HypotheticalQuestionRetriever extends Neo4jEmbeddingStoreIngestor {
 
     public final static String DEFAULT_RETRIEVAL = """
             MATCH (node)<-[:HAS_QUESTION]-(parent)
@@ -44,12 +39,12 @@ public class HypotheticalQuestionRetriever extends Neo4jEmbeddingRetriever {
             Hypothetical questions:
             """;
 
-    public HypotheticalQuestionRetriever(final EmbeddingModel embeddingModel, final Driver driver, final int maxResults, final double minScore, final Neo4jEmbeddingStore embeddingStore, final ChatLanguageModel chatModel, final ChatLanguageModel answerModel, final String promptAnswer) {
-        super(embeddingModel, driver, maxResults, minScore, "CREATE (:Parent $metadata)", Map.of(), embeddingStore, chatModel, SYSTEM_PROMPT, USER_PROMPT, answerModel, promptAnswer, null);
+    public HypotheticalQuestionRetriever(final IngestorConfig config) {
+        super(config);
     }
 
     @Override
-    public Neo4jEmbeddingStore getDefaultEmbeddingStore(final Driver driver) {
+    public Neo4jEmbeddingStore getDefaultEmbeddingStore() {
         return Neo4jEmbeddingStore.builder()
                 .driver(driver)
                 .retrievalQuery(DEFAULT_RETRIEVAL)
@@ -61,17 +56,24 @@ public class HypotheticalQuestionRetriever extends Neo4jEmbeddingRetriever {
     }
 
     public static Builder builder() {
-        return new Builder(HypotheticalQuestionRetriever.class);
+        return new Builder();
     }
 
-    public static class Builder extends Neo4jEmbeddingRetriever.Builder<Builder, HypotheticalQuestionRetriever> {
-        public Builder(final Class clazz) {
-            super(clazz);
+    public static class Builder extends Neo4jEmbeddingStoreIngestor.Builder {
+//        public Builder(final Class clazz) {
+//            super(clazz);
+//        }
+
+
+        @Override
+        protected Builder self() {
+            return this;
         }
 
         @Override
         public HypotheticalQuestionRetriever build() {
-            return super.build();
+            return new HypotheticalQuestionRetriever(createIngestorConfig());
         }
     }
+    
 }
