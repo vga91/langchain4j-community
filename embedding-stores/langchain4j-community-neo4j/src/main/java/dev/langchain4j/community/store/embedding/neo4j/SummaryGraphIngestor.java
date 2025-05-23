@@ -5,7 +5,7 @@ package dev.langchain4j.community.store.embedding.neo4j;
  */
 public class SummaryGraphIngestor extends Neo4jEmbeddingStoreIngestor {
 
-    public SummaryGraphIngestor(final IngestorConfig config) {
+    public SummaryGraphIngestor(final Neo4jIngestorConfig config) {
         super(config);
     }
 
@@ -35,7 +35,7 @@ public class SummaryGraphIngestor extends Neo4jEmbeddingStoreIngestor {
         private static final String PARENT_QUERY =
                 """
                     UNWIND $rows AS row
-                    MATCH (p:Parent {parentId: $parentId})
+                    MATCH (p:SummaryChunk {parentId: $parentId})
                     CREATE (p)-[:HAS_SUMMARY]->(u:%1$s {%2$s: row.%2$s})
                     SET u += row.%3$s
                     WITH row, u
@@ -54,7 +54,7 @@ public class SummaryGraphIngestor extends Neo4jEmbeddingStoreIngestor {
 
         @Override
         protected String getQuery() {
-            return "CREATE (:Parent $metadata)";
+            return "CREATE (:SummaryChunk $metadata)";
         }
 
         @Override

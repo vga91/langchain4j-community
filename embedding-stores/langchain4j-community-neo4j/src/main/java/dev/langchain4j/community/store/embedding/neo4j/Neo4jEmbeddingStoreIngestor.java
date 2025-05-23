@@ -56,7 +56,7 @@ import org.neo4j.driver.Session;
  * </ul>
  */
 public class Neo4jEmbeddingStoreIngestor extends ParentChildEmbeddingStoreIngestor {
-    public record IngestorConfig(
+    public record Neo4jIngestorConfig(
             DocumentTransformer documentTransformer,
             DocumentSplitter documentSplitter,
             TextSegmentTransformer textSegmentTransformer,
@@ -86,7 +86,7 @@ public class Neo4jEmbeddingStoreIngestor extends ParentChildEmbeddingStoreIngest
     protected final ChatModel questionModel;
 
 
-    public Neo4jEmbeddingStoreIngestor(IngestorConfig config) {
+    public Neo4jEmbeddingStoreIngestor(Neo4jIngestorConfig config) {
         this(
                 config.documentTransformer(),
                 config.documentSplitter(),
@@ -318,8 +318,8 @@ public class Neo4jEmbeddingStoreIngestor extends ParentChildEmbeddingStoreIngest
             return new Neo4jEmbeddingStoreIngestor(createIngestorConfig());
         }
 
-        protected IngestorConfig createIngestorConfig() {
-            return new IngestorConfig(
+        protected Neo4jIngestorConfig createIngestorConfig() {
+            return new Neo4jIngestorConfig(
                     documentTransformer,
                     documentSplitter,
                     textSegmentTransformer,
