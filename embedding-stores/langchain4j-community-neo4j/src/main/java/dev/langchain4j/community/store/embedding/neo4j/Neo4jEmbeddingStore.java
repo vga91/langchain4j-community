@@ -131,7 +131,7 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
     private final String sanitizedLabel;
     private final String textProperty;
     private final String retrievalQuery;
-    private final String entityCreationQuery;
+    private String entityCreationQuery;
     private final Set<String> notMetaKeys;
     private Map<String, Object> additionalParams;
 
@@ -282,6 +282,10 @@ public class Neo4jEmbeddingStore implements EmbeddingStore<TextSegment> {
         this.additionalParams = additionalParams;
     }
 
+    public void setEntityCreationQuery(final String entityCreationQuery) {
+        this.entityCreationQuery = entityCreationQuery;
+    }
+    
     /*
     Methods with `@Override`
     */
