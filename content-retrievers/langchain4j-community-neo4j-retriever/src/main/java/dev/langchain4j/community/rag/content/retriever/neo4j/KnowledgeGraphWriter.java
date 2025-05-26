@@ -7,7 +7,14 @@ import static dev.langchain4j.internal.ValidationUtils.ensureNotNull;
 
 import dev.langchain4j.Experimental;
 import dev.langchain4j.community.data.document.graph.GraphDocument;
+import dev.langchain4j.community.store.embedding.neo4j.Neo4jEmbeddingStore;
 import dev.langchain4j.data.document.Document;
+import dev.langchain4j.data.document.Metadata;
+import dev.langchain4j.data.embedding.Embedding;
+import dev.langchain4j.data.segment.TextSegment;
+import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.model.embedding.onnx.allminilml6v2q.AllMiniLmL6V2QuantizedEmbeddingModel;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +41,8 @@ public class KnowledgeGraphWriter {
     final String sanitizedTextProperty;
 
     private final Neo4jGraph graph;
+    private final Neo4jEmbeddingStore embeddingStore;
+    private EmbeddingModel embeddingModel = null;
 
     public KnowledgeGraphWriter(
             Neo4jGraph graph,
@@ -41,9 +50,19 @@ public class KnowledgeGraphWriter {
             String label,
             String textProperty,
             String relType,
-            String constraintName) {
+            String constraintName,
+            Neo4jEmbeddingStore embeddingStore,
+            EmbeddingModel embeddingModel) {
         this.graph = ensureNotNull(graph, "graph");
-        this.label = getOrDefault(label, DEFAULT_LABEL);
+        
+        // TODO - if embeddingStore then label is taken from there --> getSanitizedLabel()
+        this.embeddingStore = embeddingStore;
+        if (this.embeddingStore != null) {
+            this.embeddingModel = ensureNotNull(embeddingModel, "embeddingModel");
+        }
+        this.label = this.embeddingStore == null 
+                ? getOrDefault(label, DEFAULT_LABEL) 
+                : this.embeddingStore.getSanitizedLabel();
         this.relType = getOrDefault(relType, DEFAULT_REL_TYPE);
         this.idProperty = getOrDefault(idProperty, DEFAULT_ID_PROP);
         this.textProperty = getOrDefault(textProperty, DEFAULT_TEXT_PROP);
@@ -93,9 +112,84 @@ public class KnowledgeGraphWriter {
                 nodeParams.put("document", document);
             }
 
-            String nodeImportQuery = getNodeImportQuery(includeSource);
-            graph.executeWrite(nodeImportQuery, nodeParams);
 
+//            EmbeddingModel embeddingModel = new AllMiniLmL6V2QuantizedEmbeddingModel();
+
+//            List<Map> data = (List<Map>) nodeParams.get("data");
+
+//            List<Embedding> embeddings = new ArrayList<>();
+//            List<TextSegment> segments = new ArrayList<>();
+//            for (GraphNode node: graphDoc.nodes()) {
+//                final Map<String, String> properties = node.properties();
+//                properties.put("type", node.type());
+//                final String text = node.id();
+//                final TextSegment segment = TextSegment.from(text, Metadata.from(properties));
+//                final Embedding embedding = embeddingModel.embed(text).content();
+//                
+//                embeddings.addAl
+//            }
+            
+            if (embeddingStore != null) {
+                if (includeSource) {
+                    final String creationQuery = getIncludeDocsQuery(true)
+                            + "UNWIND $rows AS row\n"
+                            + mergeDocsWithSource()
+                            + """
+                            SET source += row.%3$s
+                            WITH row, source
+                            CALL db.create.setNodeVectorProperty(source, $embeddingProperty, row.%4$s)
+                            RETURN count(*)""";
+
+//                        """
+//                        UNWIND $rows AS row
+//                        // MATCH (p:Document {<sanitizedIdProperty>: <sanitizedTextProperty>})
+//                        CREATE (p)-[:<relType>]->(u:%1$s {%2$s: row.%2$s})
+//                        SET u += row.%3$s
+//                        WITH row, u
+//                        CALL db.create.setNodeVectorProperty(u, $embeddingProperty, row.%4$s)
+//                        RETURN count(*)""";
+                    embeddingStore.setEntityCreationQuery(creationQuery);
+                }
+                
+                final List<TextSegment> segments = graphDoc.nodes().stream().map(i -> {
+
+                    final Map<String, String> properties = new HashMap<>(i.properties());
+                    properties.put("type", i.type());
+                    return TextSegment.from(i.id(), Metadata.from(properties));
+                }).toList();
+
+                final List<Embedding> embeddings = embeddingModel.embedAll(segments).content();
+
+                this.embeddingStore.addAll(embeddings, segments);
+
+// data.stream().map(i -> embeddingModel.embed((String) i.get("id"))).toList();
+
+            } else {
+                String nodeImportQuery = getNodeImportQuery(includeSource);
+                graph.executeWrite(nodeImportQuery, nodeParams);
+            }
+            
+            // TODO - leverage the `entityCreationQuery` of embeddingStore for the `includeSource` stuff?
+            /*
+                protected static final String CUSTOM_CREATION_QUERY =
+            """
+                UNWIND $rows AS row
+                MATCH (p:Document {<sanitizedIdProperty>: <sanitizedTextProperty>})
+                CREATE (p)-[:<relType>]->(u:%1$s {%2$s: row.%2$s})
+                SET u += row.%3$s
+                WITH row, u
+                CALL db.create.setNodeVectorProperty(u, $embeddingProperty, row.%4$s)
+                RETURN count(*)""";
+             */
+
+            /*
+            List<Map> data = (List<Map>) nodeParams.get("data");
+
+            String s = (String) data.get(0).get("id");
+            new AllMiniLmL6V2QuantizedEmbeddingModel().embed(s);
+             */
+            
+            
             // Import relationships
             List<Map<String, String>> relData = graphDoc.relationships().stream()
                     .map(rel -> Map.of(
@@ -114,7 +208,7 @@ public class KnowledgeGraphWriter {
     private String getNodeImportQuery(boolean includeSource) {
 
         String includeDocsQuery = getIncludeDocsQuery(includeSource);
-        final String withDocsRel = includeSource ? String.format("MERGE (d)-[:%s]->(source) ", relType) : "";
+        final String withDocsRel = includeSource ? mergeDocsWithSource() : "";
 
         return includeDocsQuery + "UNWIND $data AS row "
                 + String.format("MERGE (source:%1$s {%2$s: row.id}) ", sanitizedLabel, sanitizedIdProperty)
@@ -122,6 +216,10 @@ public class KnowledgeGraphWriter {
                 + "WITH source, row "
                 + "SET source:$(row.type) "
                 + "RETURN count(*) as total";
+    }
+
+    private String mergeDocsWithSource() {
+        return String.format("MERGE (d)-[:%s]->(source) ", relType);
     }
 
     private String getIncludeDocsQuery(boolean includeSource) {
@@ -160,6 +258,8 @@ public class KnowledgeGraphWriter {
         private String relType;
         private String constraintName;
         private Neo4jGraph graph;
+        private Neo4jEmbeddingStore embeddingStore;
+        private EmbeddingModel embeddingModel;
 
         /**
          * @param graph the {@link Neo4jGraph} (required)
@@ -212,8 +312,24 @@ public class KnowledgeGraphWriter {
             return this;
         }
 
+        /**
+         * @param embeddingStore TODO
+         */
+        public Builder embeddingStore(Neo4jEmbeddingStore embeddingStore) {
+            this.embeddingStore = embeddingStore;
+            return this;
+        }
+
+        /**
+         * @param embeddingModel TODO
+         */
+        public Builder embeddingModel(EmbeddingModel embeddingModel) {
+            this.embeddingModel = embeddingModel;
+            return this;
+        }
+
         public KnowledgeGraphWriter build() {
-            return new KnowledgeGraphWriter(graph, idProperty, label, textProperty, relType, constraintName);
+            return new KnowledgeGraphWriter(graph, idProperty, label, textProperty, relType, constraintName, embeddingStore, embeddingModel);
         }
     }
 }

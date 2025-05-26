@@ -5,11 +5,19 @@ import static org.assertj.core.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.when;
 
+import dev.langchain4j.community.store.embedding.neo4j.Neo4jEmbeddingStore;
+import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import java.util.List;
+
+import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.model.embedding.onnx.allminilml6v2q.AllMiniLmL6V2QuantizedEmbeddingModel;
+import dev.langchain4j.store.embedding.EmbeddingMatch;
+import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -55,5 +63,99 @@ class Neo4jKnowledgeGraphWriterTest extends Neo4jKnowledgeGraphWriterBaseTest {
         } catch (Exception e) {
             assertThat(e.getMessage()).contains("Error executing query: CREATE CONSTRAINT 111");
         }
+    }
+
+    private static final String LABEL_TO_SANITIZE = "Label ` to \\ sanitize";
+    private static final EmbeddingModel EMBEDDING_MODEL = new AllMiniLmL6V2QuantizedEmbeddingModel();
+    
+    // TODO - test with null embedding model
+    @Test
+    void testKnowledgeGraphWithEmbeddingStoreAndNullEmbeddingModel() {
+
+        final Neo4jEmbeddingStore embeddingStore = Neo4jEmbeddingStore.builder()
+                .withBasicAuth(neo4jContainer.getBoltUrl(), USERNAME, ADMIN_PASSWORD)
+                .dimension(384)
+                .label(LABEL_TO_SANITIZE)
+                .build();
+        
+        try {
+            knowledgeGraphWriter = KnowledgeGraphWriter.builder()
+                    .graph(neo4jGraph)
+                    .embeddingStore(embeddingStore)
+                    .build();
+            fail("Should fail due to null embeddingModel");
+        } catch (Exception e) {
+            assertThat(e.getMessage()).contains("embeddingModel cannot be null");
+        }
+    }
+    
+    @Test
+    void testKnowledgeGraphWithEmbeddingStore() {
+        
+        final Neo4jEmbeddingStore embeddingStore = Neo4jEmbeddingStore.builder()
+                .withBasicAuth(neo4jContainer.getBoltUrl(), USERNAME, ADMIN_PASSWORD)
+                .dimension(384)
+                .label(LABEL_TO_SANITIZE)
+                .build();
+
+        final String text = "keanu reeves";
+        final Embedding queryEmbedding = EMBEDDING_MODEL.embed(text).content();
+        final EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
+                .queryEmbedding(queryEmbedding)
+                .minScore(0.9)
+                .build();
+        final List<EmbeddingMatch<TextSegment>> matchesBefore = embeddingStore.search(request).matches();
+        assertThat(matchesBefore).isEmpty();
+
+        knowledgeGraphWriter = KnowledgeGraphWriter.builder()
+                .graph(neo4jGraph)
+                .embeddingStore(embeddingStore)
+                .embeddingModel(EMBEDDING_MODEL)
+                .build();
+
+        knowledgeGraphWriter.addGraphDocuments(graphDocs, false);
+
+        final List<EmbeddingMatch<TextSegment>> matches = embeddingStore.search(request).matches();
+        assertThat(matches).hasSize(1);
+        assertThat(matches.get(0).embedded().text()).containsIgnoringCase(text);
+    }
+
+
+
+    @Test
+    void testKnowledgeGraphWithEmbeddingStoreRetrievalQueryAndIncludeSource() {
+
+        final Neo4jEmbeddingStore embeddingStore = Neo4jEmbeddingStore.builder()
+                .withBasicAuth(neo4jContainer.getBoltUrl(), USERNAME, ADMIN_PASSWORD)
+                .dimension(384)
+                .label(LABEL_TO_SANITIZE)
+                .retrievalQuery("""
+                        MATCH (chunk)-[:PART_OF]->(d:Document)
+                        WITH d, collect(DISTINCT {chunk: chunk, score: score}) AS chunks, avg(score) as avg_score
+                        
+                        // TODO...
+                        """)
+                .build();
+
+        final String text = "keanu reeves";
+        final Embedding queryEmbedding = EMBEDDING_MODEL.embed(text).content();
+        final EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
+                .queryEmbedding(queryEmbedding)
+                .minScore(0.9)
+                .build();
+        final List<EmbeddingMatch<TextSegment>> matchesBefore = embeddingStore.search(request).matches();
+        assertThat(matchesBefore).isEmpty();
+
+        knowledgeGraphWriter = KnowledgeGraphWriter.builder()
+                .graph(neo4jGraph)
+                .embeddingStore(embeddingStore)
+                .embeddingModel(EMBEDDING_MODEL)
+                .build();
+
+        knowledgeGraphWriter.addGraphDocuments(graphDocs, true);
+
+        final List<EmbeddingMatch<TextSegment>> matches = embeddingStore.search(request).matches();
+        assertThat(matches).hasSize(1);
+        assertThat(matches.get(0).embedded().text()).containsIgnoringCase(text);
     }
 }
