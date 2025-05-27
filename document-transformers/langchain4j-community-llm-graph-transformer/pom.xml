@@ -50,6 +50,17 @@
             <version>${langchain4j.open-ai.version}</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-community-neo4j</artifactId>
+            <version>1.1.0-beta7-SNAPSHOT</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>neo4j</artifactId>
+            <scope>test</scope>
+        </dependency>
 
     </dependencies>
 

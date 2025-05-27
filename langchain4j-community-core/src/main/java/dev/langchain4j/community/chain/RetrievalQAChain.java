@@ -43,7 +43,7 @@ public class RetrievalQAChain implements Chain<Query, String> {
     }
 
     private UserMessage augment(Query query) {
-
+// ((DefaultQueryRouter) ((DefaultRetrievalAugmentor) retrievalAugmentor).queryRouter).contentRetrievers.iterator().next().retrieve(Query.from("what is my name?"))
         final UserMessage from = UserMessage.from(query.text());
 
         final Metadata metadata = query.metadata() == null ? Metadata.from(from, null, null) : query.metadata();
