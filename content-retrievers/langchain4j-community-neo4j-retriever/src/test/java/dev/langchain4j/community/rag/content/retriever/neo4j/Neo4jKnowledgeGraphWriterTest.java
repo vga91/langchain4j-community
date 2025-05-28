@@ -65,17 +65,16 @@ class Neo4jKnowledgeGraphWriterTest extends Neo4jKnowledgeGraphWriterBaseTest {
         }
     }
 
-    private static final String LABEL_TO_SANITIZE = "Label ` to \\ sanitize";
+    private static final String LABEL_CUSTOM = "Custom";
     private static final EmbeddingModel EMBEDDING_MODEL = new AllMiniLmL6V2QuantizedEmbeddingModel();
     
-    // TODO - test with null embedding model
     @Test
     void testKnowledgeGraphWithEmbeddingStoreAndNullEmbeddingModel() {
 
         final Neo4jEmbeddingStore embeddingStore = Neo4jEmbeddingStore.builder()
                 .withBasicAuth(neo4jContainer.getBoltUrl(), USERNAME, ADMIN_PASSWORD)
                 .dimension(384)
-                .label(LABEL_TO_SANITIZE)
+                .label(LABEL_CUSTOM)
                 .build();
         
         try {
@@ -95,32 +94,22 @@ class Neo4jKnowledgeGraphWriterTest extends Neo4jKnowledgeGraphWriterBaseTest {
         final Neo4jEmbeddingStore embeddingStore = Neo4jEmbeddingStore.builder()
                 .withBasicAuth(neo4jContainer.getBoltUrl(), USERNAME, ADMIN_PASSWORD)
                 .dimension(384)
-                .label(LABEL_TO_SANITIZE)
+                .label(LABEL_CUSTOM)
                 .build();
 
-        final String text = "keanu reeves";
-        final Embedding queryEmbedding = EMBEDDING_MODEL.embed(text).content();
-        final EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
-                .queryEmbedding(queryEmbedding)
-                .minScore(0.9)
-                .build();
-        final List<EmbeddingMatch<TextSegment>> matchesBefore = embeddingStore.search(request).matches();
-        assertThat(matchesBefore).isEmpty();
-
-        knowledgeGraphWriter = KnowledgeGraphWriter.builder()
-                .graph(neo4jGraph)
-                .embeddingStore(embeddingStore)
-                .embeddingModel(EMBEDDING_MODEL)
-                .build();
-
-        knowledgeGraphWriter.addGraphDocuments(graphDocs, false);
-
-        final List<EmbeddingMatch<TextSegment>> matches = embeddingStore.search(request).matches();
-        assertThat(matches).hasSize(1);
-        assertThat(matches.get(0).embedded().text()).containsIgnoringCase(text);
+        testKnowledgeGraphWithEmbeddingStoreCommon(embeddingStore, false);
     }
 
+    @Test
+    void testKnowledgeGraphWithEmbeddingStoreAndIncludeSource() {
+        final Neo4jEmbeddingStore embeddingStore = Neo4jEmbeddingStore.builder()
+                .withBasicAuth(neo4jContainer.getBoltUrl(), USERNAME, ADMIN_PASSWORD)
+                .dimension(384)
+                .label(LABEL_CUSTOM)
+                .build();
 
+        testKnowledgeGraphWithEmbeddingStoreCommon(embeddingStore, true);
+    }
 
     @Test
     void testKnowledgeGraphWithEmbeddingStoreRetrievalQueryAndIncludeSource() {
@@ -128,15 +117,20 @@ class Neo4jKnowledgeGraphWriterTest extends Neo4jKnowledgeGraphWriterBaseTest {
         final Neo4jEmbeddingStore embeddingStore = Neo4jEmbeddingStore.builder()
                 .withBasicAuth(neo4jContainer.getBoltUrl(), USERNAME, ADMIN_PASSWORD)
                 .dimension(384)
-                .label(LABEL_TO_SANITIZE)
+                .label(LABEL_CUSTOM)
                 .retrievalQuery("""
-                        MATCH (chunk)-[:PART_OF]->(d:Document)
-                        WITH d, collect(DISTINCT {chunk: chunk, score: score}) AS chunks, avg(score) as avg_score
-                        
-                        // TODO...
+                        MATCH (node)<-[r:HAS_ENTITY]-(d:Document)
+                        WITH d, collect(DISTINCT {chunk: node, score: score}) AS chunks, avg(score) as avg_score
+                        RETURN d.text AS text, avg_score AS score, properties(d) AS metadata
+                        ORDER BY score DESC
+                        LIMIT $maxResults
                         """)
                 .build();
 
+        testKnowledgeGraphWithEmbeddingStoreCommon(embeddingStore, true);
+    }
+
+    private static void testKnowledgeGraphWithEmbeddingStoreCommon(Neo4jEmbeddingStore embeddingStore, boolean includeSource) {
         final String text = "keanu reeves";
         final Embedding queryEmbedding = EMBEDDING_MODEL.embed(text).content();
         final EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
@@ -152,7 +146,7 @@ class Neo4jKnowledgeGraphWriterTest extends Neo4jKnowledgeGraphWriterBaseTest {
                 .embeddingModel(EMBEDDING_MODEL)
                 .build();
 
-        knowledgeGraphWriter.addGraphDocuments(graphDocs, true);
+        knowledgeGraphWriter.addGraphDocuments(graphDocs, includeSource);
 
         final List<EmbeddingMatch<TextSegment>> matches = embeddingStore.search(request).matches();
         assertThat(matches).hasSize(1);
